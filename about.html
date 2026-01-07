@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About This Sizing Tool</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2em;
+      line-height: 1.6;
+      color: #333;
+    }
+    h1, h2 {
+      color: #004e92;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #ccc;
+      margin: 1.5em 0;
+    }
+    .version {
+      font-size: 0.9em;
+      color: #666;
+      margin-bottom: 2em;
+    }
+    .feedback-form {
+      margin-top: 2em;
+      padding: 1em;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background-color: #f9f9f9;
+    }
+    .feedback-form input,
+    .feedback-form textarea {
+      width: 100%;
+      padding: 0.6em;
+      margin-bottom: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .feedback-form button {
+      background-color: #004e92;
+      color: white;
+      padding: 0.6em 1.2em;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .feedback-form button:hover {
+      background-color: #00376b;
+    }
+  </style>
+</head>
+<body>
+  <h1>About This Sizing Tool</h1>
+  <div class="version">v1.4 &nbsp; | &nbsp; Last updated: October 2025</div>
+<hr>
+<h6 class="text-muted">Recent Enhancements</h6>
+<ul>
+  <li><strong>RVTools Import:</strong> You can now load real-world VM exports directly into the tool, streamlining infrastructure planning with live data.</li>
+  <li><strong>Workload-Based Sizing:</strong> Automated sizing logic now supports workload profiles — making it effortless to model environments like Azure Virtual Desktop.</li>
+  <li><strong>Smarter Defaults:</strong> The tool intelligently adapts to common deployment patterns, helping you get accurate results faster.</li>
+  <li><strong>Hardware Choices:</strong> Updated to the latest available CPU's.</li>
+</ul>
+  <hr />
+  <h2>Purpose</h2>
+  <p>
+    This tool was built to help infrastructure planners quickly translate workload requirements into validated hardware configurations. Whether you're exploring datacenter or edge deployments or simply refining a single instance, it gives you clarity, flexibility, and presentation-ready outputs.
+  </p>
+
+  <hr />
+  <h2>How to Use</h2>
+  <p>
+    The tool supports two modes:
+  </p>
+  <ul>
+    <li><strong>Automated Sizing Mode:</strong> Click <em>Run Sizing</em> to input workload requirements either by Virtual Machine specifications or infrastructure totals — choosing between total CPU cores or total CPU GHz. You can also specify growth percentage and high availability level. These guide the engine’s recommendations.</li>
+    <li><strong>Manual Configuration Mode:</strong> Adjust sliders and dropdowns to customize machine count, disk layout, memory size, and more. Ideal for field overrides or exploratory planning.</li>
+  </ul>
+  <p>
+    After sizing, you’ll see a visual summary, a bar chart comparing requirements vs. provisioned capacity, and post-failure capabilities. You can export results to PowerPoint for sharing or convert to PDF externally if needed.
+  </p>
+
+  <hr />
+<h2>Design Philosophy</h2>
+<p>
+  This tool is built around clarity, operational realism, and deliberate constraint. We’ve made specific design choices to reflect best practices and platform optimizations:
+</p>
+<ul>
+  <li><strong>Storage:</strong> We exclusively provide single-tier flash storage — NVMe or SSD — with no hybrid disk scenarios. HDD-based caching tiers or parity layouts are not supported. For resiliency, we default to <strong>3-way mirror</strong> for instances larger than two machines, and <strong>2-way mirror</strong> for one- and two-machine deployments.</li>
+  <li><strong>Compute:</strong> We prioritize minimizing machine and core count where possible. The sizing engine automatically selects the <em>highest-clocked Intel® Xeon® Gold 6000 series processor</em> that satisfies the core requirement — balancing performance with efficiency.</li>
+  <li><strong>Instance Sizing:</strong> In automated mode, if a workload requires more than seven machines, the engine will automatically split the configuration into multiple instances of seven or fewer. This reflects a known design preference in Azure Local, where smaller instance sizes tend to behave more predictably.</li>
+  <li><strong>Transparency:</strong> All sizing logic — including disk reserve calculations, post-failure modeling, and memory layout — is exposed and traceable. Manual override mode lets you explore configurations freely, while the chart remains anchored to your original requirements for clarity.</li>
+<li><strong>Reference:</strong> All the how-to information, why the sizing engine works the way it does is based on Microsoft documentation, described here <a href="https://learn.microsoft.com/en-us/azure/azure-local/?view=azloc-2509">Azure Local on Microsoft website</a>. </li>
+
+</ul>
+  <hr />
+  <h2>Current Capabilities</h2>
+  <ul>
+    <li>📊 Visual comparison of CPU, RAM, and Storage against original requirements</li>
+    <li>🧠 Dual-mode logic: automated and manual workflows</li>
+    <li>🛠️ Split-instance support for multi-instance planning</li>
+    <li>🧩 SVG-based topology rendering for switchless and converged layouts</li>
+    <li>📤 PowerPoint export for presentation-ready output</li>
+  </ul>
+
+  <hr />
+  <h2>Future Enhancements</h2>
+  <p>
+    Upcoming improvements include bulk sizing across multiple locations, enhanced export customization, and additional input methods. We're also exploring ways to make the tool more modular and spreadsheet-integrated for advanced users.
+  </p>
+
+<hr />
+<h2>Fun Facts <img src="images/copilot-icon.png" alt="Copilot logo" style="height: 1em; vertical-align: middle;" /></h2>
+<p>
+  In mid-July of 2025, my friend Greg Reeder sent me a Teams message: <em>"They cancelled that meeting again for the 70th time — how are we ever going to get a good tool?"</em> That was the spark. That same evening, after hours, I started building a new sizing tool from scratch.
+</p>
+<p>
+  I’m not a developer, and I’m not particularly good at writing code — but I figured with AI tools, I might be able to get something working quickly. And that turned out to be completely true. Within minutes, a strawman design of a sizing engine was generated by <strong>Copilot</strong>, Microsoft’s AI companion. From there, Copilot helped write the logic, debug edge cases, refine disk and memory calculations, and even draft the visual layout and export formatting.
+</p>
+<p>
+  But as with all AI tools, they don’t replace human experience — they amplify it. Over the following months, I worked closely with a team of experts to refine and evolve the tool into what you see today. Huge thanks to:
+</p>
+<ul>
+  <li>Todd Day</li>
+  <li>Jason Festich</li>
+  <li>Monica Peña</li>
+  <li>Patrick Thomas</li>
+  <li>Joseph Voros</li>
+</ul>
+<p>
+  I hope this tool helps you size Azure Local deployments quickly, reliably, and with confidence.
+</p>
+<p><strong>— Pieter Teeling</strong></p>
+  <hr />
+  
+  <h2>Disclaimer</h2>
+  <p>This tool is independently created and maintained by Pieter Teeling for informational purposes only. It is not affiliated with, endorsed by, or connected to Dell Technologies in any way. Product images, model names, and other references to Dell Technologies are used solely for illustrative and informational purposes. All views, content, and opinions expressed herein are solely those of the creator and do not reflect the views of Dell Technologies or any of its subsidiaries.</p>
+  
+  <hr />
+
+  <h2>Feedback</h2>
+  <p>
+    We’d love to hear your thoughts. Use the form below to send feedback, suggestions, or bug reports. (fill out the form below and it will open in your default email client)
+  </p>
+
+  <form class="feedback-form" action="mailto:pieter@dell.com?subject=AX%20Sizing%20Tool%20Feedback" method="post" enctype="text/plain">
+    <label for="name">Your Name</label>
+    <input type="text" id="name" name="name" />
+
+    <label for="email">Your Email</label>
+    <input type="email" id="email" name="email" />
+
+    <label for="message">Your Feedback</label>
+    <textarea id="message" name="message" rows="5"></textarea>
+
+    <button type="submit">Send Feedback</button>
+  </form>
+
+  <P>© 2025 Pieter Teeling. All rights reserved.
+</P>
+</body>
+</html>

@@ -70,7 +70,7 @@ function calculateNodePenalty(nodesNeeded) {
   return (nodesNeeded - optimalMax) * 20;
 }
 
-function calculateResourceOvershootPenalty(actual, required, weight = 1, maxPenalty = 3000) {
+function calculateResourceOvershootPenalty(actual, required, weight = 1, maxPenalty = Infinity) {
   if (actual <= required) return 0;
   const overshootRatio = actual / required;
   const rawPenalty = Math.pow(overshootRatio - 1, 1.5) * weight * 1000;
@@ -338,7 +338,13 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
   });
   
   // Sort by score and filter for viable options
-  candidates.sort((a, b) => a.score - b.score);
+  // Use totalGB as tie-breaker: prefer smaller configs when scores are equal
+  candidates.sort((a, b) => {
+    if (Math.abs(a.score - b.score) < 0.01) { // scores are essentially equal
+      return a.totalGB - b.totalGB; // prefer smaller memory config
+    }
+    return a.score - b.score;
+  });
   
   const viableOptions = candidates.filter(c => c.meetsRequirement);
   const selectedConfig = viableOptions.length > 0 ? viableOptions[0] : candidates[0];

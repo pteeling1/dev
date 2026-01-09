@@ -206,6 +206,15 @@ cpuScoreLog.push({
 
   if (!bestCandidate) throw new Error("No viable CPU configuration found");
   
+  // Debug: show all CPU options and why the winner was chosen
+  console.group("🔍 CPU Selection Debug (selectOptimalCpuForCores)");
+  console.table(cpuScoreLog);
+  console.log(`✅ Selected: ${bestCandidate.cpu.model} (${bestCandidate.cpu.cores} cores, ${bestCandidate.cpu.base_clock_GHz} GHz) with score ${Math.round(bestCandidate.score)}`);
+  if (bestGoldCandidate) {
+    console.log(`  (Gold alternative: ${bestGoldCandidate.cpu.model} with score ${Math.round(bestGoldCandidate.score)})`);
+  }
+  console.groupEnd();
+
   // 🧠 Relative preference logic
   const finalCandidate = (bestGoldCandidate &&
                           bestGoldCandidate.score < bestCandidate.score + goldPreferenceThreshold)
@@ -322,6 +331,15 @@ function getCpuListForChassis(chassisModel) {
   }
 
   if (!bestCandidate) throw new Error("No viable CPU configuration found");
+
+  // Debug: show all CPU options and why the winner was chosen
+  console.group("🔍 CPU Selection Debug (selectOptimalCpuForGHz)");
+  console.table(cpuScoreLog);
+  console.log(`✅ Selected: ${bestCandidate.cpu.model} (${bestCandidate.cpu.cores} cores, ${bestCandidate.cpu.base_clock_GHz} GHz) with score ${Math.round(bestCandidate.score)}`);
+  if (bestGoldCandidate) {
+    console.log(`  (Gold alternative: ${bestGoldCandidate.cpu.model} with score ${Math.round(bestGoldCandidate.score)})`);
+  }
+  console.groupEnd();
 
   const finalCandidate = (bestGoldCandidate &&
                           bestGoldCandidate.score < bestCandidate.score + goldPreferenceThreshold)

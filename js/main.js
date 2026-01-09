@@ -960,14 +960,29 @@ diskSlider.addEventListener("input", () => {
 nodeTypeRadios.forEach(radio => {
   radio.addEventListener("change", () => {
     updateNodeImage();
-    isManualOverride = true;
     updateDiskLimits();
     updateCpuOptions();
     updateMemoryOptions();
     updateStorage();
-    calculateTotals();
     updateLegend();
-    recalculateSizingFromUI();
+    
+    // If we have a previous sizing result and we're in automated mode, recalculate with new chassis
+    if (window.lastSizingResult && !isManualOverride) {
+      const payload = getSizingPayloadFromHTML();
+      try {
+        window.lastSizingResult = sizeCluster(payload);
+        renderClusterResult(window.lastSizingResult);
+        renderWorkloadSummary(payload);
+        window.originalRequirements = payload;
+      } catch (error) {
+        console.error("❌ Recalculation failed:", error);
+      }
+    } else {
+      // In manual mode, just update the display
+      isManualOverride = true;
+      calculateTotals();
+      recalculateSizingFromUI();
+    }
   });
 });
 

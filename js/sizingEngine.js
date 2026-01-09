@@ -349,7 +349,18 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
   const viableOptions = candidates.filter(c => c.meetsRequirement);
   const selectedConfig = viableOptions.length > 0 ? viableOptions[0] : candidates[0];
   
-  
+  console.table({
+    "Required RAM": requiredRAM,
+    "Node Count": nodeCount,
+    "HA Level": haLevel,
+    "Selected Config": `${selectedConfig.dimmCount} × ${selectedConfig.dimmSize}GB`,
+    "Total Per Node": selectedConfig.totalGB,
+    "Usable Per Node": selectedConfig.usableMemoryPerNode,
+    "Total Usable": selectedConfig.totalUsableMemory,
+    "Shortfall": selectedConfig.memoryShortfall,
+    "Score": selectedConfig.score.toFixed(2),
+    "Viable Options Count": viableOptions.length
+  });
   
   return selectedConfig;
 }
@@ -778,10 +789,15 @@ while (nodeCount <= maxNodes) {
 if (!finalClusterSummaries) {
   throw new Error(`❌ Final cluster usable storage did not meet required ${totalStorage} TiB even with ${nodeCount} nodes`);
 }
+
+// Recalculate memory configuration for the final node count
+// (storage requirements may have increased nodeCount significantly)
+const finalMemoryConfig = selectOptimalMemoryConfig(totalRAM, nodeCount, haLevel);
+
 nodeCount = finalClusterSummaries.reduce((sum, cluster) => sum + cluster.nodeCount, 0);
 const totalUsableCores = nodeCount * usableCoresPerNode - finalClusters.length * SYS_CPU;
 const totalUsableGHz = totalUsableCores * selectedCpu.base_clock_GHz;
-const totalUsableMemory = nodeCount * memoryConfig.usableMemoryPerNode;
+const totalUsableMemory = nodeCount * finalMemoryConfig.usableMemoryPerNode;
 const totalPostFailure = finalClusterSummaries.reduce((acc, cluster) => {
   acc.activeNodes += cluster.postFailure.activeNodes;
   acc.usableCores += cluster.postFailure.usableCores;
@@ -815,9 +831,9 @@ clusterSummaries: finalClusterSummaries,
   totalUsableGHz: Math.round(totalUsableGHz),
 
   // Memory Configuration
-  memorySizeGB: memoryConfig.totalGB,
-  memoryConfig: `${memoryConfig.totalGB} GB (${memoryConfig.dimmCount} × ${memoryConfig.dimmSize} GB)`,
-  usableMemoryPerNode: memoryConfig.usableMemoryPerNode,
+  memorySizeGB: finalMemoryConfig.totalGB,
+  memoryConfig: `${finalMemoryConfig.totalGB} GB (${finalMemoryConfig.dimmCount} × ${finalMemoryConfig.dimmSize} GB)`,
+  usableMemoryPerNode: finalMemoryConfig.usableMemoryPerNode,
   totalUsableMemory,
 
   // Storage Configuration

@@ -865,24 +865,14 @@ let postFailureCapabilities = null;
   // With more nodes available, we might be able to select a lower-core CPU while still meeting requirements
   let finalSelectedCpu = selectedCpu;
   try {
-    const coresPerNodeNeeded = Math.ceil((totalCPU + SYS_CPU) / finalNodeCount);
-    const gHzPerNodeNeeded = Math.ceil((totalGHz + (SYS_CPU * 0.01)) / finalNodeCount);
-
-    // Try to find minimum CPU cores/GHz that work
-    const viableCpus = filteredCpuList.filter(cpu => {
-      const physCores = cpu.cores * 2;
-      if (totalCPU > 0 && physCores < coresPerNodeNeeded) return false;
-      if (totalGHz > 0 && cpu.base_clock_GHz < gHzPerNodeNeeded) return false;
-      return true;
-    });
-
-    if (viableCpus.length > 0) {
-      // Sort by cores then GHz to find minimum viable CPU
-      viableCpus.sort((a, b) => {
-        if (a.cores !== b.cores) return a.cores - b.cores;
-        return a.base_clock_GHz - b.base_clock_GHz;
-      });
-      finalSelectedCpu = viableCpus[0];
+    // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
+    const recalcSelection = totalCPU > 0 
+      ? selectOptimalCpuForCores(totalCPU, totalRAM, totalStorage, haLevel, null, filteredCpuList)
+      : selectOptimalCpuForGHz(totalGHz, totalRAM, totalStorage, haLevel, filteredCpuList);
+    
+    if (recalcSelection && recalcSelection.cpu) {
+      finalSelectedCpu = recalcSelection.cpu;
+      console.log(`🔄 CPU recalculated for final ${finalNodeCount} nodes: ${finalSelectedCpu.model} (${finalSelectedCpu.cores} cores, ${finalSelectedCpu.base_clock_GHz} GHz)`);
     }
   } catch (err) {
     console.warn("⚠️ CPU recalculation for final node count failed, keeping original CPU selection");

@@ -165,10 +165,17 @@ cpuScoreLog.push({
 
     if (!bestCandidate || score < bestCandidate.score) {
       bestCandidate = candidate;
+    } else if (score === bestCandidate.score && cpu.base_clock_GHz > bestCandidate.cpu.base_clock_GHz) {
+      // Tie-breaker: if scores are equal, prefer higher clock speed
+      bestCandidate = candidate;
     }
 
     if (cpu.model.includes("Gold 6") &&
         (!bestGoldCandidate || score < bestGoldCandidate.score)) {
+      bestGoldCandidate = candidate;
+    } else if (cpu.model.includes("Gold 6") && score === bestGoldCandidate.score && 
+               cpu.base_clock_GHz > bestGoldCandidate.cpu.base_clock_GHz) {
+      // Tie-breaker: if scores are equal, prefer higher clock speed
       bestGoldCandidate = candidate;
     }
   }
@@ -275,10 +282,17 @@ function getCpuListForChassis(chassisModel) {
 
     if (!bestCandidate || totalScore < bestCandidate.score) {
       bestCandidate = candidate;
+    } else if (totalScore === bestCandidate.score && cpu.base_clock_GHz > bestCandidate.cpu.base_clock_GHz) {
+      // Tie-breaker: if scores are equal, prefer higher clock speed
+      bestCandidate = candidate;
     }
 
     if (cpu.model.includes("Gold 6") &&
         (!bestGoldCandidate || totalScore < bestGoldCandidate.score)) {
+      bestGoldCandidate = candidate;
+    } else if (cpu.model.includes("Gold 6") && totalScore === bestGoldCandidate.score && 
+               cpu.base_clock_GHz > bestGoldCandidate.cpu.base_clock_GHz) {
+      // Tie-breaker: if scores are equal, prefer higher clock speed
       bestGoldCandidate = candidate;
     }
   }

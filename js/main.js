@@ -966,17 +966,9 @@ nodeTypeRadios.forEach(radio => {
     updateStorage();
     updateLegend();
     
-    // If we have a previous sizing result and we're in automated mode, recalculate with new chassis
-    if (window.lastSizingResult && !isManualOverride) {
-      const payload = getSizingPayloadFromHTML();
-      try {
-        window.lastSizingResult = sizeCluster(payload);
-        renderClusterResult(window.lastSizingResult);
-        renderWorkloadSummary(payload);
-        window.originalRequirements = payload;
-      } catch (error) {
-        console.error("❌ Recalculation failed:", error);
-      }
+    // If we're in automated sizing mode (not manual override), recalculate with new chassis
+    if (!isManualOverride && window.lastSizingResult) {
+      runSizing();
     } else {
       // In manual mode, just update the display
       isManualOverride = true;

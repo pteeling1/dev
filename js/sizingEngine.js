@@ -639,165 +639,200 @@ let storageConfig;
 let postFailureCapabilities = null;
  
  
-  // Step 1: Select optimal CPU based on primary constraint
-  let cpuSelection;
+  // Step 1: Get candidate CPU lists and prepare for parallel constraint calculation
+  const correctCpuList = getCpuListForChassis(chassisModel);
+  const filteredCpuList = req.cpuModel
+    ? correctCpuList.filter(cpu => cpu.model === req.cpuModel)
+    : correctCpuList;
+
+  // Start with a base CPU selection to understand core/GHz requirements
+  let baseCpuSelection;
   let primaryConstraint;
   
-  // Optional: enforce a specific CPU model
-const correctCpuList = getCpuListForChassis(chassisModel);
-const filteredCpuList = req.cpuModel
-  ? correctCpuList.filter(cpu => cpu.model === req.cpuModel)
-  : correctCpuList;
-if (req.cpuModel) {
-  // CPU model enforced in payload
-}
- try {
-  if (totalGHz > 0) {
-    primaryConstraint = "GHz";
-    cpuSelection = selectOptimalCpuForGHz(totalGHz, totalRAM, totalStorage, haLevel, filteredCpuList);
-    
-  } else if (totalCPU > 0) {
-    primaryConstraint = "Cores";
-    cpuSelection = selectOptimalCpuForCores(totalCPU, totalRAM, totalStorage, haLevel, null, filteredCpuList);
-  } else {
-    throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
-  }
-} catch (err) {
-  console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
-  console.warn("🔁 Falling back to 8-core sizing attempt…");
-
   try {
-    cpuSelection = selectOptimalCpuForCores(8, totalRAM, totalStorage, haLevel, null, filteredCpuList);
-    primaryConstraint = "Fallback (8 cores)";
-  } catch (fallbackErr) {
-    throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
-  }
-}
-
-  if (!cpuSelection || !cpuSelection.cpu) {
-  throw new Error("❌ CPU selection failed — no viable candidate returned");
-}
-const selectedCpu = cpuSelection.cpu;
-
-  let nodeCount = cpuSelection.nodesNeeded;
-
-  
-
-  const physicalCoresPerNode = selectedCpu.cores * 2;
-const usableCoresPerNode = physicalCoresPerNode;
-
-  // Step 2: Validate and adjust for memory requirements
-  const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodeCount, haLevel);
-  
-  // Check if memory constraint requires more nodes
-  const memoryRequiredNodes = haLevel === "n+1" 
-    ? Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode) + 1
-    : Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode);
-  
-    if (memoryRequiredNodes > nodeCount) {
-    nodeCount = memoryRequiredNodes;
+    if (totalGHz > 0) {
+      primaryConstraint = "GHz";
+      baseCpuSelection = selectOptimalCpuForGHz(totalGHz, totalRAM, totalStorage, haLevel, filteredCpuList);
+    } else if (totalCPU > 0) {
+      primaryConstraint = "Cores";
+      baseCpuSelection = selectOptimalCpuForCores(totalCPU, totalRAM, totalStorage, haLevel, null, filteredCpuList);
+    } else {
+      throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
+    }
+  } catch (err) {
+    console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
+    console.warn("🔁 Falling back to 8-core sizing attempt…");
+    try {
+      baseCpuSelection = selectOptimalCpuForCores(8, totalRAM, totalStorage, haLevel, null, filteredCpuList);
+      primaryConstraint = "Fallback (8 cores)";
+    } catch (fallbackErr) {
+      throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
+    }
   }
 
-  // Step 3: Ensure minimum cluster size
+  if (!baseCpuSelection || !baseCpuSelection.cpu) {
+    throw new Error("❌ CPU selection failed — no viable candidate returned");
+  }
+
+  // PARALLEL CONSTRAINT CALCULATION
+  // Calculate independent node requirements for each constraint
+  const baseCpu = baseCpuSelection.cpu;
+  const baseCoresPerNode = baseCpu.cores * 2;
+  
+  // 1. CPU constraint: nodes needed to meet CPU requirement
+  const cpuNodesNeeded = baseCpuSelection.nodesNeeded || 
+    Math.ceil((totalCPU + SYS_CPU) / baseCoresPerNode);
+
+  // 2. Memory constraint: nodes needed to meet memory requirement
+  const tempMemoryConfig = selectOptimalMemoryConfig(totalRAM, 3, haLevel);
+  const memoryNodesNeeded = haLevel === "n+1"
+    ? Math.ceil(totalRAM / tempMemoryConfig.usableMemoryPerNode) + 1
+    : Math.ceil(totalRAM / tempMemoryConfig.usableMemoryPerNode);
+
+  // 3. Start with max of CPU and memory; storage will be calculated in the loop
+  let nodeCount = Math.max(cpuNodesNeeded, memoryNodesNeeded);
+
+  // Ensure minimum cluster size
   const minNodes = sizingConstraints.minClusterSize || 3;
   if (nodeCount < minNodes) {
     nodeCount = minNodes;
   }
 
-  // Step 4: Calculate final configuration
- const maxNodes = 512;
-let finalClusterSummaries = null;
-let finalClusters = null;
-let finalTotalUsableTiB = 0;
-let diskConfig = null;
+  let selectedCpu = baseCpu;
+  const physicalCoresPerNode = selectedCpu.cores * 2;
+  const usableCoresPerNode = physicalCoresPerNode;
+  let memoryConfig = tempMemoryConfig;
 
-while (nodeCount <= maxNodes) {
-  try {
-    storageResiliency = nodeCount >= 3 ? "3-way" : "2-way";
-    diskConfig = selectDiskConfig(totalStorage, nodeCount, chassisModel); // Select once for entire cluster
+  // Step 2: Storage loop - find minimum nodes needed for storage constraint
+  // This may increase nodeCount beyond CPU/Memory requirements
+  const maxNodes = 512;
+  let finalClusterSummaries = null;
+  let finalClusters = null;
+  let finalTotalUsableTiB = 0;
+  let diskConfig = null;
+  let storageNodesNeeded = nodeCount;
 
-    const clusters = splitClusters(nodeCount);
+  while (nodeCount <= maxNodes) {
+    try {
+      storageResiliency = nodeCount >= 3 ? "3-way" : "2-way";
+      diskConfig = selectDiskConfig(totalStorage, nodeCount, chassisModel);
 
-    const clusterSummaries = clusters.map((size, index) => {
-      const reservedNodes = Math.min(size, 4);
-      const reservedDrives = reservedNodes *1;
-      const fullNodes = size - reservedNodes;
-      const reservedDiskCount = diskConfig.disksPerNode - 1;
-      const totalDrives = size * diskConfig.disksPerNode;
-      const dataDrives = totalDrives - reservedDrives;
-      const fullDiskCount = diskConfig.disksPerNode;
-      const diskSizeTB = diskConfig.diskSizeTB;
-      const usableRatio = 1 / 1.1024;
-      const reservedTiB = reservedNodes * reservedDiskCount * diskSizeTB * usableRatio;
-      const fullTiB = fullNodes * fullDiskCount * diskSizeTB * usableRatio;
-      const rawTiB = reservedTiB + fullTiB;
-      const usableTiB = storageResiliency === "3-way"
-        ? rawTiB / 3
-        : storageResiliency === "2-way"
-          ? rawTiB / 2
-          : rawTiB;
+      const clusters = splitClusters(nodeCount);
 
-      const postFailureNodes = Math.max(size - 1, 1);
-      const postFailureCores = postFailureNodes * usableCoresPerNode - SYS_CPU;
-      const postFailureGHz = postFailureCores * selectedCpu.base_clock_GHz;
-      if (totalGHz > 0 && postFailureGHz > totalGHz * 1.5) return null;
-      const postFailureRAM = postFailureNodes * memoryConfig.usableMemoryPerNode;
+      const clusterSummaries = clusters.map((size, index) => {
+        const reservedNodes = Math.min(size, 4);
+        const reservedDrives = reservedNodes * 1;
+        const fullNodes = size - reservedNodes;
+        const reservedDiskCount = diskConfig.disksPerNode - 1;
+        const totalDrives = size * diskConfig.disksPerNode;
+        const dataDrives = totalDrives - reservedDrives;
+        const fullDiskCount = diskConfig.disksPerNode;
+        const diskSizeTB = diskConfig.diskSizeTB;
+        const usableRatio = 1 / 1.1024;
+        const reservedTiB = reservedNodes * reservedDiskCount * diskSizeTB * usableRatio;
+        const fullTiB = fullNodes * fullDiskCount * diskSizeTB * usableRatio;
+        const rawTiB = reservedTiB + fullTiB;
+        const usableTiB = storageResiliency === "3-way"
+          ? rawTiB / 3
+          : storageResiliency === "2-way"
+            ? rawTiB / 2
+            : rawTiB;
 
-      return {
-        name: `Instance ${String.fromCharCode(65 + index)}`,
-        nodeCount: size,
-        reservedNodes,
-        usableCores: size * usableCoresPerNode - SYS_CPU,
-        usableGHz: (size * usableCoresPerNode - SYS_CPU) * selectedCpu.base_clock_GHz,
-        usableMemoryGB: size * memoryConfig.usableMemoryPerNode,
-        usableTiB: parseFloat(usableTiB.toFixed(2)),
-        resiliency: storageResiliency,
-        switchMode,
-        diskSizeTB,
-        disksPerNode: diskConfig.disksPerNode,
-        rawTiB: parseFloat(rawTiB.toFixed(2)),
-        reserveTiB: parseFloat(reservedTiB.toFixed(2)),
-        resiliencyTiB: parseFloat(diskConfig.resiliencyTiB.toFixed(2)),
-        postFailure: {
-          activeNodes: postFailureNodes,
-          usableCores: postFailureCores,
-          usableGHz: postFailureGHz,
-          usableMemoryGB: postFailureRAM,
-          meetsCoreRequirement: totalCPU > 0 ? postFailureCores >= totalCPU * (size / nodeCount) : true,
-          meetsGHzRequirement: totalGHz > 0 ? postFailureGHz >= totalGHz * (size / nodeCount) : true,
-          meetsRamRequirement: postFailureRAM >= totalRAM * (size / nodeCount)
-        }
-      };
-    }).filter(Boolean); // Remove nulls from overshoot disqualifications
+        const postFailureNodes = Math.max(size - 1, 1);
+        const postFailureCores = postFailureNodes * usableCoresPerNode - SYS_CPU;
+        const postFailureGHz = postFailureCores * selectedCpu.base_clock_GHz;
+        if (totalGHz > 0 && postFailureGHz > totalGHz * 1.5) return null;
+        const postFailureRAM = postFailureNodes * memoryConfig.usableMemoryPerNode;
 
-    const totalUsableTiB = clusterSummaries.reduce((sum, cluster) => sum + cluster.usableTiB, 0);
-    if (totalUsableTiB >= totalStorage) {
-      finalClusterSummaries = clusterSummaries;
-      finalClusters = clusters;
-      finalTotalUsableTiB = totalUsableTiB;
-      break;
+        return {
+          name: `Instance ${String.fromCharCode(65 + index)}`,
+          nodeCount: size,
+          reservedNodes,
+          usableCores: size * usableCoresPerNode - SYS_CPU,
+          usableGHz: (size * usableCoresPerNode - SYS_CPU) * selectedCpu.base_clock_GHz,
+          usableMemoryGB: size * memoryConfig.usableMemoryPerNode,
+          usableTiB: parseFloat(usableTiB.toFixed(2)),
+          resiliency: storageResiliency,
+          switchMode,
+          diskSizeTB,
+          disksPerNode: diskConfig.disksPerNode,
+          rawTiB: parseFloat(rawTiB.toFixed(2)),
+          reserveTiB: parseFloat(reservedTiB.toFixed(2)),
+          resiliencyTiB: parseFloat(diskConfig.resiliencyTiB.toFixed(2)),
+          postFailure: {
+            activeNodes: postFailureNodes,
+            usableCores: postFailureCores,
+            usableGHz: postFailureGHz,
+            usableMemoryGB: postFailureRAM,
+            meetsCoreRequirement: totalCPU > 0 ? postFailureCores >= totalCPU * (size / nodeCount) : true,
+            meetsGHzRequirement: totalGHz > 0 ? postFailureGHz >= totalGHz * (size / nodeCount) : true,
+            meetsRamRequirement: postFailureRAM >= totalRAM * (size / nodeCount)
+          }
+        };
+      }).filter(Boolean);
+
+      const totalUsableTiB = clusterSummaries.reduce((sum, cluster) => sum + cluster.usableTiB, 0);
+      if (totalUsableTiB >= totalStorage) {
+        finalClusterSummaries = clusterSummaries;
+        finalClusters = clusters;
+        finalTotalUsableTiB = totalUsableTiB;
+        storageNodesNeeded = nodeCount;
+        break;
+      }
+
+      console.warn(`⚠️ Node count ${nodeCount} failed: usableTiB = ${totalUsableTiB.toFixed(2)} TiB`);
+    } catch (err) {
+      console.warn(`❌ Node count ${nodeCount} failed: ${err.message}`);
     }
 
-    console.warn(`⚠️ Node count ${nodeCount} failed: usableTiB = ${totalUsableTiB.toFixed(2)} TiB`);
-  } catch (err) {
-    console.warn(`❌ Node count ${nodeCount} failed: ${err.message}`);
+    nodeCount++;
   }
 
-  nodeCount++;
-}
+  if (!finalClusterSummaries) {
+    throw new Error(`❌ Final cluster usable storage did not meet required ${totalStorage} TiB even with ${nodeCount} nodes`);
+  }
 
-if (!finalClusterSummaries) {
-  throw new Error(`❌ Final cluster usable storage did not meet required ${totalStorage} TiB even with ${nodeCount} nodes`);
-}
+  // Step 3: Now we know the final node count (max of CPU, Memory, Storage constraints)
+  // Recalculate CPU, Memory, and Storage configs optimally for this final node count
+  const finalNodeCount = finalClusterSummaries.reduce((sum, cluster) => sum + cluster.nodeCount, 0);
 
-// Recalculate memory configuration for the final node count
-// (storage requirements may have increased nodeCount significantly)
-const finalMemoryConfig = selectOptimalMemoryConfig(totalRAM, nodeCount, haLevel);
+  console.log(`📊 Node requirements - CPU: ${cpuNodesNeeded}, Memory: ${memoryNodesNeeded}, Storage: ${storageNodesNeeded}, Final: ${finalNodeCount}`);
 
-nodeCount = finalClusterSummaries.reduce((sum, cluster) => sum + cluster.nodeCount, 0);
-const totalUsableCores = nodeCount * usableCoresPerNode - finalClusters.length * SYS_CPU;
-const totalUsableGHz = totalUsableCores * selectedCpu.base_clock_GHz;
-const totalUsableMemory = nodeCount * finalMemoryConfig.usableMemoryPerNode;
+  // Recalculate memory configuration for the final node count
+  const finalMemoryConfig = selectOptimalMemoryConfig(totalRAM, finalNodeCount, haLevel);
+
+  // Recalculate CPU selection for the final node count
+  // With more nodes available, we might be able to select a lower-core CPU while still meeting requirements
+  let finalSelectedCpu = selectedCpu;
+  try {
+    const coresPerNodeNeeded = Math.ceil((totalCPU + SYS_CPU) / finalNodeCount);
+    const gHzPerNodeNeeded = Math.ceil((totalGHz + (SYS_CPU * 0.01)) / finalNodeCount);
+
+    // Try to find minimum CPU cores/GHz that work
+    const viableCpus = filteredCpuList.filter(cpu => {
+      const physCores = cpu.cores * 2;
+      if (totalCPU > 0 && physCores < coresPerNodeNeeded) return false;
+      if (totalGHz > 0 && cpu.base_clock_GHz < gHzPerNodeNeeded) return false;
+      return true;
+    });
+
+    if (viableCpus.length > 0) {
+      // Sort by cores then GHz to find minimum viable CPU
+      viableCpus.sort((a, b) => {
+        if (a.cores !== b.cores) return a.cores - b.cores;
+        return a.base_clock_GHz - b.base_clock_GHz;
+      });
+      finalSelectedCpu = viableCpus[0];
+    }
+  } catch (err) {
+    console.warn("⚠️ CPU recalculation for final node count failed, keeping original CPU selection");
+  }
+
+  const finalPhysicalCoresPerNode = finalSelectedCpu.cores * 2;
+  const finalUsableCoresPerNode = finalPhysicalCoresPerNode;
+const totalUsableCores = finalNodeCount * finalUsableCoresPerNode - finalClusters.length * SYS_CPU;
+const totalUsableGHz = totalUsableCores * finalSelectedCpu.base_clock_GHz;
+const totalUsableMemory = finalNodeCount * finalMemoryConfig.usableMemoryPerNode;
 const totalPostFailure = finalClusterSummaries.reduce((acc, cluster) => {
   acc.activeNodes += cluster.postFailure.activeNodes;
   acc.usableCores += cluster.postFailure.usableCores;
@@ -816,17 +851,17 @@ const totalReserveTiB = finalClusterSummaries
   .reduce((sum, cluster) => sum + cluster.reserveTiB, 0);
 const result = {
   // Cluster Configuration
-  nodeCount, clusterCount,
+  nodeCount: finalNodeCount, clusterCount,
  clusterSizes: finalClusters,
 clusterSummaries: finalClusterSummaries,
   chassisModel,
 
   // CPU Configuration
-  cpuModel: selectedCpu.model,
-  cpuCoresPerSocket: selectedCpu.cores,
-  cpuClockGHz: selectedCpu.base_clock_GHz,
-  physicalCoresPerNode,
-  usableCoresPerNode,
+  cpuModel: finalSelectedCpu.model,
+  cpuCoresPerSocket: finalSelectedCpu.cores,
+  cpuClockGHz: finalSelectedCpu.base_clock_GHz,
+  physicalCoresPerNode: finalPhysicalCoresPerNode,
+  usableCoresPerNode: finalUsableCoresPerNode,
   totalUsableCores,
   totalUsableGHz: Math.round(totalUsableGHz),
 

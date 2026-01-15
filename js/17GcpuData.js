@@ -1,71 +1,5 @@
 export const cpuList = [
   {
-    model: "Intel Xeon 6 Efficient 6710E",
-    base_clock_GHz: 2.4,
-    cores: 64,
-    threads: 64,
-    memory_type: "DDR5-5600",
-    memory_speed: 5600,
-    spec_rate_base: null,
-    option_id: "G2MTH9I",
-    sku: "338-CQTX"
-  },
-  {
-    model: "Intel Xeon 6 Efficient 6740E",
-    base_clock_GHz: 2.4,
-    cores: 96,
-    threads: 96,
-    memory_type: "DDR5-6400",
-    memory_speed: 6400,
-    spec_rate_base: null,
-    option_id: "G2NS0FW",
-    sku: "338-CQTZ"
-  },
-  {
-    model: "Intel Xeon 6 Efficient 6746E",
-    base_clock_GHz: 2.0,
-    cores: 112,
-    threads: 112,
-    memory_type: "DDR5-5600",
-    memory_speed: 5600,
-    spec_rate_base: null,
-    option_id: "GFZ7P6X",
-    sku: "338-CQTW"
-  },
-  {
-    model: "Intel Xeon 6 Efficient 6756E",
-    base_clock_GHz: 1.8,
-    cores: 128,
-    threads: 128,
-    memory_type: "DDR5-6400",
-    memory_speed: 6400,
-    spec_rate_base: null,
-    option_id: "GG9NYFS",
-    sku: "338-CQTY"
-  },
-  {
-    model: "Intel Xeon 6 Efficient 6766E",
-    base_clock_GHz: 1.9,
-    cores: 144,
-    threads: 144,
-    memory_type: "DDR5-6400",
-    memory_speed: 6400,
-    spec_rate_base: null,
-    option_id: "GMU1YE0",
-    sku: "338-CQVB"
-  },
-  {
-    model: "Intel Xeon 6 Efficient 6780E",
-    base_clock_GHz: 2.2,
-    cores: 144,
-    threads: 144,
-    memory_type: "DDR5-6400",
-    memory_speed: 6400,
-    spec_rate_base: null,
-    option_id: "GP7ZL12",
-    sku: "338-CQTV"
-  },
-  {
     model: "Intel Xeon 6 Performance 6505P",
     base_clock_GHz: 2.2,
     cores: 12,
@@ -209,17 +143,6 @@ export const cpuList = [
     sku: "338-CSTY"
   },
   {
-    model: "Intel Xeon 6 Performance 6745P",
-    base_clock_GHz: 3.1,
-    cores: 32,
-    threads: 64,
-    memory_type: "DDR5-6400",
-    memory_speed: 6400,
-    spec_rate_base: null,
-    option_id: "G1N5T76",
-    sku: "338-CTST"
-  },
-  {
     model: "Intel Xeon 6 Performance 6747P",
     base_clock_GHz: 2.7,
     cores: 48,
@@ -241,7 +164,7 @@ export const cpuList = [
     option_id: "GO96FGB",
     sku: "338-CSTX"
   },
-   {
+  {
     model: "Intel Xeon 6 Performance 6767P",
     base_clock_GHz: 2.4,
     cores: 64,

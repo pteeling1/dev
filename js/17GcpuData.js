@@ -1,4 +1,4 @@
-// Intel Xeon 6 Performance processors
+// Intel Xeon 6 Performance processors only
 export const cpuList = [
   {
     model: "Intel Xeon 6 Performance 6505P",

@@ -95,10 +95,14 @@ export function updateStorage() {
   
   const outputDiv = document.getElementById("output");
   if (outputDiv) {
+  const totalGHzDisplay = Number.isFinite(Number(results.totalGHz))
+    ? Math.round(Number(results.totalGHz))
+    : results.totalGHz;
+
   outputDiv.innerHTML = `
     <strong>Total Nodes:</strong> ${results.nodeCount}<br>
     <strong>Total Cores:</strong> ${results.totalCores}<br>
-    <strong>Total GHz:</strong> ${results.totalGHz} GHz<br>
+    <strong>Total GHz:</strong> ${totalGHzDisplay} GHz<br>
     <strong>Total Memory:</strong> ${results.totalMemoryGB} GB<br>
     <strong>Raw Storage:</strong> ${results.rawTB} TB<br>
     <strong>Usable Storage:</strong> ${results.usableTB} TB (${results.usableTiB} TiB)<br>

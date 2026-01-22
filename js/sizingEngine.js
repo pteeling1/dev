@@ -103,10 +103,7 @@ function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLe
 
       // Check if survivable cores meet requirement
       if (survivableCores >= requiredCores) {
-        // Also ensure CPU utilization won't exceed max threshold
-        const totalUsableCoresCheck = nodesNeeded * usableCoresPerNode - SYS_CPU;
-        const utilizationCheck = requiredCores / totalUsableCoresCheck;
-        if (utilizationCheck <= maxCPUUtilization) break;
+        break;
       }
       
       nodesNeeded++;

@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rack-Aware Cluster Sizing</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    
+    .container-custom {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .form-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .form-section h5 {
+      color: #007acc;
+      border-bottom: 2px solid #007acc;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .config-input {
+      margin-bottom: 15px;
+    }
+    
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      margin-top: 30px;
+    }
+    
+    .config-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-left: 4px solid #007acc;
+    }
+    
+    .config-card.fits {
+      border-left-color: #6a9955;
+      background: #f0fdf4;
+    }
+    
+    .config-card.does-not-fit {
+      border-left-color: #f48771;
+      background: #fef2f2;
+    }
+    
+    .config-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 15px;
+    }
+    
+    .fits-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .fits-badge.yes {
+      background: #6a9955;
+      color: white;
+    }
+    
+    .fits-badge.no {
+      background: #f48771;
+      color: white;
+    }
+    
+    .resource-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+    
+    .resource-item:last-child {
+      border-bottom: none;
+    }
+    
+    .utilization {
+      font-size: 12px;
+      color: #666;
+      margin-left: 10px;
+    }
+    
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #f48771;
+      color: #f48771;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .success-message {
+      background: #f0fdf4;
+      border: 1px solid #6a9955;
+      color: #6a9955;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .no-results {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-custom">
+    <h1 class="mb-4"><i class="bi bi-diagram-3"></i> Rack-Aware Cluster Sizing Tool</h1>
+    
+    <!-- Sizing Method Selection -->
+    <div class="form-section">
+      <h5><i class="bi bi-sliders"></i> Sizing Method</h5>
+      <div class="btn-group mb-3" role="group" style="width: 100%;">
+        <input type="radio" class="btn-check" name="sizingMethod" id="methodAutomatic" value="automatic" checked>
+        <label class="btn btn-outline-primary" for="methodAutomatic" style="flex: 1;">Automatic</label>
+        
+        <input type="radio" class="btn-check" name="sizingMethod" id="methodManual" value="manual">
+        <label class="btn btn-outline-primary" for="methodManual" style="flex: 1;">Manual Configuration</label>
+      </div>
+    </div>
+    
+    <!-- Input Form Section (Automatic) -->
+    <div id="automaticSection" class="form-section">
+      <h5><i class="bi bi-calculator"></i> Define Your Requirements</h5>
+      
+      <!-- Sizing Mode Toggle -->
+      <div class="form-section">
+        <h6 class="text-secondary">Requirement Type</h6>
+        <div class="btn-group mb-3" role="group">
+          <input type="radio" class="btn-check" name="requirementType" id="infraType" value="infra" checked>
+          <label class="btn btn-outline-secondary" for="infraType">Infrastructure Totals</label>
+          
+          <input type="radio" class="btn-check" name="requirementType" id="vmType" value="vm">
+          <label class="btn btn-outline-secondary" for="vmType">VM-Based</label>
+        </div>
+      </div>
+      
+      <!-- Infrastructure Totals Section -->
+      <div id="infraSection">
+        <div class="config-input">
+          <label for="totalCores" class="form-label">Total CPU Cores Required</label>
+          <input type="number" id="totalCores" class="form-control" value="64" min="1">
+        </div>
+        
+        <div class="config-input">
+          <label for="totalMemory" class="form-label">Total RAM Required (GB)</label>
+          <input type="number" id="totalMemory" class="form-control" value="1024" min="1">
+        </div>
+        
+        <div class="config-input">
+          <label for="totalStorage" class="form-label">Total Storage Required (TiB)</label>
+          <input type="number" id="totalStorage" class="form-control" value="50" min="1">
+        </div>
+      </div>
+      
+      <!-- VM-Based Section (hidden by default) -->
+      <div id="vmSection" style="display: none;">
+        <div class="config-input">
+          <label for="vmCount" class="form-label">Number of VMs</label>
+          <input type="number" id="vmCount" class="form-control" value="50" min="1">
+        </div>
+        
+        <div class="config-input">
+          <label for="vcpuPerVm" class="form-label">vCPUs per VM</label>
+          <input type="number" id="vcpuPerVm" class="form-control" value="2" min="1">
+        </div>
+        
+        <div class="config-input">
+          <label for="vcpuRatio" class="form-label">vCPU to Core Ratio</label>
+          <input type="number" id="vcpuRatio" class="form-control" value="4" min="1" step="0.1">
+          <small class="text-muted">Default 4:1 (each vCPU = 0.25 cores)</small>
+        </div>
+        
+        <div class="config-input">
+          <label for="ramPerVm" class="form-label">RAM per VM (GB)</label>
+          <input type="number" id="ramPerVm" class="form-control" value="8" min="1">
+        </div>
+        
+        <div class="config-input">
+          <label for="storagePerVm" class="form-label">Storage per VM (GB)</label>
+          <input type="number" id="storagePerVm" class="form-control" value="100" min="1">
+        </div>
+      </div>
+      
+      <!-- Chassis Model Selection -->
+      <hr>
+      <div class="config-input">
+        <label for="chassisModel" class="form-label">Chassis Model</label>
+        <select id="chassisModel" class="form-select">
+          <option value="AX 660">AX 660</option>
+          <option value="AX 670">AX 670</option>
+          <option value="AX 760">AX 760</option>
+          <option value="AX 770" selected>AX 770</option>
+        </select>
+        <small class="text-muted">All other hardware specs will be automatically determined by the sizing engine</small>
+      </div>
+      
+      <button id="calculateBtn" class="btn btn-primary btn-lg w-100 mt-3">
+        <i class="bi bi-lightning-charge"></i> Calculate Rack-Aware Options
+      </button>
+    </div>
+    
+    <!-- Manual Section (hidden by default) -->
+    <div id="manualSection" style="display: none;">
+      <div class="form-section">
+        <h5><i class="bi bi-sliders"></i> Manual Hardware Configuration</h5>
+        <p class="text-muted mb-3">Fine-tune hardware specifications for advanced sizing scenarios.</p>
+        
+        <div class="config-input">
+          <label for="manualChassisModel" class="form-label">Chassis Model</label>
+          <select id="manualChassisModel" class="form-select">
+            <option value="AX 660">AX 660</option>
+            <option value="AX 670">AX 670</option>
+            <option value="AX 760">AX 760</option>
+            <option value="AX 770" selected>AX 770</option>
+          </select>
+        </div>
+        
+        <div class="config-input">
+          <label for="cpuModel" class="form-label">CPU Model</label>
+          <select id="cpuModel" class="form-select">
+            <option value="auto" selected>Auto-Select (Best Fit)</option>
+            <option value="Intel Xeon Gold 6336Y">Intel Xeon Gold 6336Y (32-core)</option>
+            <option value="Intel Xeon Gold 6348">Intel Xeon Gold 6348 (28-core)</option>
+            <option value="Intel Xeon Platinum 8490H">Intel Xeon Platinum 8490H (60-core)</option>
+          </select>
+        </div>
+        
+        <div class="config-input">
+          <label for="disksPerNode" class="form-label">Disks per Node</label>
+          <input type="number" id="disksPerNode" class="form-control" value="10" min="2" max="24">
+        </div>
+        
+        <div class="config-input">
+          <label for="diskSizeTiB" class="form-label">Disk Size</label>
+          <select id="diskSizeTiB" class="form-select">
+            <option value="0.96">0.96 TiB (960 GB)</option>
+            <option value="1.92">1.92 TiB</option>
+            <option value="3.84">3.84 TiB</option>
+            <option value="7.68" selected>7.68 TiB</option>
+            <option value="15.36">15.36 TiB</option>
+          </select>
+        </div>
+        
+        <div class="config-input">
+          <label for="dimmSize" class="form-label">Memory DIMM Size (GB)</label>
+          <select id="dimmSize" class="form-select">
+            <option value="16">16 GB</option>
+            <option value="32">32 GB</option>
+            <option value="64">64 GB</option>
+            <option value="96">96 GB</option>
+            <option value="128" selected>128 GB</option>
+            <option value="256">256 GB</option>
+          </select>
+        </div>
+      </div>
+      
+      <a href="index.html" class="btn btn-primary btn-lg w-100 mt-3">
+        <i class="bi bi-sliders"></i> Open Main Configuration Tool
+      </a>
+      <p class="text-muted mt-3 text-center">Use the main AX Calculator for the complete manual cluster configuration experience.</p>
+    </div>
+    
+    <!-- Results Section -->
+    <div id="resultsContainer">
+      <div id="errorMessage" class="error-message"></div>
+      <div id="successMessage" class="success-message"></div>
+      <div id="resultsGrid" class="results-grid"></div>
+    </div>
+  </div>
+  
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module">
+    import { sizeCluster } from './js/sizingEngine.js';
+    import { analyzeAllRackAwareConfigs, createRackAwareClusterSpec } from './js/rackAwareCluster.js';
+
+    // DOM Elements
+    const sizingMethodRadios = document.querySelectorAll('input[name="sizingMethod"]');
+    const automaticSection = document.getElementById('automaticSection');
+    const manualSection = document.getElementById('manualSection');
+    
+    const requirementTypeRadios = document.querySelectorAll('input[name="requirementType"]');
+    const infraSection = document.getElementById('infraSection');
+    const vmSection = document.getElementById('vmSection');
+    
+    const calculateBtn = document.getElementById('calculateBtn');
+    const resultsGrid = document.getElementById('resultsGrid');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+
+    // Form Inputs - Requirements
+    const totalCoresInput = document.getElementById('totalCores');
+    const totalMemoryInput = document.getElementById('totalMemory');
+    const totalStorageInput = document.getElementById('totalStorage');
+
+    // Form Inputs - VM Based
+    const vmCountInput = document.getElementById('vmCount');
+    const vcpuPerVmInput = document.getElementById('vcpuPerVm');
+    const vcpuRatioInput = document.getElementById('vcpuRatio');
+    const ramPerVmInput = document.getElementById('ramPerVm');
+    const storagePerVmInput = document.getElementById('storagePerVm');
+
+    // Form Inputs - Hardware (Manual mode only, automatic has chassis only)
+    const manualChassisModelInput = document.getElementById('manualChassisModel');
+    const cpuModelInput = document.getElementById('cpuModel');
+    const disksPerNodeInput = document.getElementById('disksPerNode');
+    const diskSizeTiBInput = document.getElementById('diskSizeTiB');
+    const dimmSizeInput = document.getElementById('dimmSize');
+    
+    // Automatic mode chassis
+    const chassisModelInput = document.getElementById('chassisModel');
+
+    // Sizing Method Switching
+    sizingMethodRadios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.value === 'automatic') {
+          automaticSection.style.display = 'block';
+          manualSection.style.display = 'none';
+        } else {
+          automaticSection.style.display = 'none';
+          manualSection.style.display = 'block';
+        }
+      });
+    });
+
+    // Requirement Type Switching
+    requirementTypeRadios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.value === 'infra') {
+          infraSection.style.display = 'block';
+          vmSection.style.display = 'none';
+        } else {
+          infraSection.style.display = 'none';
+          vmSection.style.display = 'block';
+        }
+      });
+    });
+
+    // Calculate Requirements
+    function getRequirements() {
+      const type = document.querySelector('input[name="requirementType"]:checked').value;
+      let cores, memory, storage;
+
+      if (type === 'infra') {
+        cores = parseInt(totalCoresInput.value) || 0;
+        memory = parseInt(totalMemoryInput.value) || 0;
+        storage = parseFloat(totalStorageInput.value) || 0;
+      } else {
+        const vmCount = parseInt(vmCountInput.value) || 0;
+        const vcpuPerVm = parseInt(vcpuPerVmInput.value) || 0;
+        const ratio = parseFloat(vcpuRatioInput.value) || 1;
+        const ramPerVm = parseInt(ramPerVmInput.value) || 0;
+        const storagePerVm = parseInt(storagePerVmInput.value) || 0;
+
+        cores = Math.ceil((vmCount * vcpuPerVm) / ratio);
+        memory = vmCount * ramPerVm;
+        storage = (vmCount * storagePerVm) / 1024 / 1024; // GB → TiB
+      }
+
+      return { cores, memory, storage };
+    }
+
+    // Get CPU specs from correct data file based on chassis model
+    function getCpuListForChassis(chassisModel) {
+      if (chassisModel === "AX 670" || chassisModel === "AX 770") {
+        return cpuDataNew; // 17th Gen Intel
+      }
+      return cpuDataOld; // 16th Gen Intel
+    }
+    
+    function getCpuSpecs(cpuModel, chassisModel) {
+      const cpuList = getCpuListForChassis(chassisModel);
+      
+      if (cpuModel === 'auto') {
+        // Return the first (best) CPU from the appropriate list
+        if (cpuList.length > 0) {
+          const cpu = cpuList[0];
+          return {
+            cores: cpu.cores,
+            baseGHz: cpu.base_clock_GHz,
+            model: cpu.model
+          };
+        }
+      } else {
+        // Find specific CPU model
+        const cpu = cpuList.find(c => c.model === cpuModel);
+        if (cpu) {
+          return {
+            cores: cpu.cores,
+            baseGHz: cpu.base_clock_GHz,
+            model: cpu.model
+          };
+        }
+      }
+      
+      // Fallback
+      return { cores: 32, baseGHz: 3.0, model: 'Intel Xeon Gold 6336Y' };
+    }
+
+    // Clear Results
+    function clearResults() {
+      resultsGrid.innerHTML = '';
+      errorMessage.style.display = 'none';
+      errorMessage.textContent = '';
+      successMessage.style.display = 'none';
+      successMessage.textContent = '';
+    }
+
+    // Calculate and Display Results
+    calculateBtn.addEventListener('click', () => {
+      clearResults();
+
+      try {
+        const requirements = getRequirements();
+
+        if (requirements.cores <= 0 || requirements.memory <= 0 || requirements.storage <= 0) {
+          throw new Error('All requirements must be greater than 0');
+        }
+
+        const isAutomatic = document.querySelector('input[name="sizingMethod"]:checked').value === 'automatic';
+        const chassisModelForAutomatic = chassisModelInput.value;
+        const chassisModelForManual = manualChassisModelInput.value;
+        const chassisModel = isAutomatic ? chassisModelForAutomatic : chassisModelForManual;
+        
+        // Instead of calling sizeCluster() once, we'll size each rack-aware config independently
+        // This allows each config to find the best CPU/memory/disk combo for its fixed node count
+        
+        // Import sizing functions we need (these should be available from sizingEngine)
+        // We'll create a request for each rack-aware configuration
+        
+        console.log('Sizing for rack-aware configs with requirements:', {
+          cores: requirements.cores,
+          memory: requirements.memory,
+          storage: requirements.storage,
+          chassis: chassisModel
+        });
+        
+        // For now, call sizeCluster() to get a baseline hardware profile
+        const sizingRequest = {
+          totalCPU: requirements.cores,
+          totalRAM: requirements.memory,
+          totalStorage: requirements.storage,
+          chassisModel: chassisModel,
+          growthPct: 0,
+          haLevel: "n+1",
+          maxCPUUtilization: 0.60,
+          maxMemoryUtilization: 0.60
+        };
+
+        const sizingResult = sizeCluster(sizingRequest);
+        
+        console.log('Sizing result:', sizingResult);
+        
+        // Step 2: Extract hardware specifications from the sizing result
+        // These become the "per-node" specs we'll use for all rack-aware configs
+        const cpuCoresPerNode = sizingResult.cpuCoresPerSocket; 
+        const cpuGHzPerNode = sizingResult.cpuClockGHz;
+        const memoryGBPerNode = sizingResult.memorySizeGB;
+        const disksPerNode = sizingResult.disksPerNode;
+        const diskSizeTiB = sizingResult.diskSizeTB;
+        const selectedCpuModel = sizingResult.cpuModel;
+
+        // Step 3: Analyze all 4 rack-aware configurations independently
+        // Each config will find its own optimal disk count
+        const analyzeRequest = {
+          requiredCores: requirements.cores,
+          requiredMemoryGB: requirements.memory,
+          requiredStorageTiB: requirements.storage,
+          cpuCoresPerNode,
+          cpuGHzPerNode,
+          cpuModel: selectedCpuModel,
+          chassisModel
+        };
+
+        console.log('Analyzing all rack-aware configs independently:', analyzeRequest);
+        const results = analyzeAllRackAwareConfigs(analyzeRequest);
+        
+        console.log('Rack-aware analysis results:', results);
+
+        // Check if any config fits
+        const fittingConfigs = results.filter(r => r.fits);
+        
+        if (fittingConfigs.length === 0) {
+          errorMessage.textContent = '❌ No rack-aware configuration meets your requirements. Consider increasing node count targets or adjusting requirements.';
+          errorMessage.style.display = 'block';
+        } else {
+          successMessage.innerHTML = `✓ Found ${fittingConfigs.length} suitable configuration(s) for your requirements`;
+          successMessage.style.display = 'block';
+        }
+
+        // Display all configurations
+        results.forEach(config => {
+          const card = document.createElement('div');
+          card.className = `config-card ${config.fits ? 'fits' : 'does-not-fit'}`;
+
+          const badge = document.createElement('span');
+          badge.className = `fits-badge ${config.fits ? 'yes' : 'no'}`;
+          badge.textContent = config.fits ? '✓ FITS' : '✗ DOES NOT FIT';
+
+          const title = document.createElement('div');
+          title.className = 'config-title';
+          title.textContent = config.configName;
+
+          const content = document.createElement('div');
+
+          if (!config.fits) {
+            // Show why it doesn't fit
+            const reason = document.createElement('div');
+            reason.innerHTML = `<div style="color: #f48771; padding: 10px; background: #fef2f2; border-radius: 4px;">
+              <strong>Cannot be sized:</strong> ${config.reason}
+            </div>`;
+            content.appendChild(reason);
+          } else {
+            // Configuration Summary
+            const configSummary = document.createElement('div');
+            configSummary.innerHTML = `
+              <div style="background: #f0f4f8; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px;">
+                <div><strong>Chassis:</strong> ${chassisModel}</div>
+                <div><strong>CPU:</strong> ${selectedCpuModel} (${cpuCoresPerNode} cores @ ${cpuGHzPerNode} GHz)</div>
+                <div><strong>Memory:</strong> ${memoryGBPerNode} GB per node</div>
+                <div><strong>Storage:</strong> ${config.sizedConfig.disksPerNode} drives × ${config.sizedConfig.diskSizeTiB} TiB each</div>
+              </div>
+            `;
+
+            // Compute Resources
+            const computeSection = document.createElement('div');
+            computeSection.innerHTML = `
+              <strong style="color: #007acc;">Compute Resources (Normal)</strong>
+              <div class="resource-item">
+                <span>Nodes:</span>
+                <span>${config.spec.topology.totalNodes}</span>
+              </div>
+              <div class="resource-item">
+                <span>Total Cores:</span>
+                <span>${config.spec.compute.normal.usableCores} <span class="utilization">(✓ ${config.fitBreakdown.cores.utilization})</span></span>
+              </div>
+              <div class="resource-item">
+                <span>Total GHz:</span>
+                <span>${config.spec.compute.normal.usableGHz}</span>
+              </div>
+              <div class="resource-item">
+                <span>Total Memory:</span>
+                <span>${config.spec.compute.normal.usableMemoryGB} GB <span class="utilization">(✓ ${config.fitBreakdown.memory.utilization})</span></span>
+              </div>
+            `;
+
+            // Storage Resources
+            const storageSection = document.createElement('div');
+            storageSection.innerHTML = `
+              <hr style="margin: 10px 0;">
+              <strong style="color: #007acc;">Storage</strong>
+              <div class="resource-item">
+                <span>Resiliency:</span>
+                <span>${config.spec.storage.volumeResiliency}</span>
+              </div>
+              <div class="resource-item">
+                <span>Raw Total:</span>
+                <span>${config.spec.storage.totalRawTiB} TiB</span>
+              </div>
+              <div class="resource-item">
+                <span>Reserved:</span>
+                <span>${config.spec.storage.reservedTiB} TiB (${config.spec.storage.reservedDrives} drives)</span>
+              </div>
+              <div class="resource-item">
+                <span>Usable:</span>
+                <span>${config.spec.storage.usableCapacityTiB} TiB <span class="utilization">(✓ ${config.fitBreakdown.storage.utilization})</span></span>
+              </div>
+            `;
+
+            // Fault Tolerance
+            const faultSection = document.createElement('div');
+            faultSection.innerHTML = `
+              <hr style="margin: 10px 0;">
+              <strong style="color: #007acc;">Fault Tolerance</strong>
+              <div style="font-size: 12px; color: #666; margin-top: 8px;">
+                ${config.faultTolerance.description}
+              </div>
+            `;
+
+            content.appendChild(configSummary);
+            content.appendChild(computeSection);
+            content.appendChild(storageSection);
+            content.appendChild(faultSection);
+          }
+
+          card.appendChild(badge);
+          card.appendChild(title);
+          card.appendChild(content);
+
+          resultsGrid.appendChild(card);
+        });
+
+      } catch (error) {
+        clearResults();
+        errorMessage.textContent = `❌ Error: ${error.message}`;
+        errorMessage.style.display = 'block';
+        console.error('Calculation error:', error);
+      }
+    });
+
+    // Allow Enter key to calculate
+    document.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && e.target.matches('input[type="number"], select')) {
+        calculateBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>

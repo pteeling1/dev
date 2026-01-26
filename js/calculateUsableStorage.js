@@ -39,6 +39,9 @@ export function calculateUsableStorage(nodes, disksPerNode, diskSizeTB, resilien
     case "3-way":
       usableTB = usableAfterReserve / 3;
       break;
+    case "4-way":
+      usableTB = usableAfterReserve / 4;
+      break;
     default:
       usableTB = usableAfterReserve;
   }

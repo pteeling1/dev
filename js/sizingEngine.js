@@ -428,8 +428,8 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
   
   return selectedConfig;
 }
-function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel) {
-  const resiliencyLevel = nodeCount < 3 ? "2-way" : "3-way";
+function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel, overrideResiliencyLevel = null) {
+  const resiliencyLevel = overrideResiliencyLevel || (nodeCount < 3 ? "2-way" : "3-way");
   const allowSmallFootprint = requiredUsableTiB < 3;
 
   

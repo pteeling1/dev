@@ -430,6 +430,7 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
 }
 function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel, overrideResiliencyLevel = null) {
   const resiliencyLevel = overrideResiliencyLevel || (nodeCount < 3 ? "2-way" : "3-way");
+  console.log(`🔍 selectDiskConfig: requiredUsableTiB=${requiredUsableTiB}, nodeCount=${nodeCount}, override=${overrideResiliencyLevel}, using=${resiliencyLevel}`);
   const allowSmallFootprint = requiredUsableTiB < 3;
 
   
@@ -499,6 +500,7 @@ function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel, overrideRe
     throw new Error(`❌ Disk config failed to meet required usable storage of ${requiredUsableTiB.toFixed(2)} TiB`);
   }
 
+  console.log(`✓ selectDiskConfig returning: ${bestDisk.disksPerNode}×${bestDisk.diskSizeTB}TB with ${bestDisk.usableTiB} TiB usable (${resiliencyLevel})`);
   return bestDisk;
 }
 
@@ -695,14 +697,36 @@ function sizeCluster(req) {
     chassisModel = "AX 770",
     switchMode = "separate",
     maxCPUUtilization = 0.60,
-    maxMemoryUtilization = 0.60
+    maxMemoryUtilization = 0.60,
+    rackAwareConfig = null  // Optional: '1+1', '2+2', '3+3', '4+4' to constrain sizing
   } = req;
 
+  console.log(`📍 sizeCluster called with rackAwareConfig: ${rackAwareConfig}`);
+  
   // Adjust memory requirement to account for max memory utilization constraint
   // If maxMemoryUtilization is 60%, we need to provision for totalRAM / 0.60
   const adjustedTotalRAM = totalRAM / maxMemoryUtilization;
 
-  
+  // EARLY RACK-AWARE CHECK: Determine fixed node count and resiliency if specified
+  let effectiveStorageResiliency = "3-way"; // default
+  let rackAwareNodeCount = null;
+  let rackAwareSizingNodeCount = null; // Node count to use for CPU/Memory sizing (post-failure)
+  if (rackAwareConfig) {
+    const rackAwareNodeMap = {
+      "1+1": 2,
+      "2+2": 4,
+      "3+3": 6,
+      "4+4": 8
+    };
+    if (rackAwareNodeMap[rackAwareConfig]) {
+      rackAwareNodeCount = rackAwareNodeMap[rackAwareConfig];
+      // For CPU/Memory: size for post-failure capacity (half the nodes)
+      // Storage uses full cluster with mirroring
+      rackAwareSizingNodeCount = rackAwareNodeCount / 2;
+      effectiveStorageResiliency = (rackAwareConfig === "1+1") ? "2-way" : "4-way";
+      console.log(`🎯 Rack-aware mode: ${rackAwareConfig} with ${rackAwareNodeCount} nodes (total), sizing CPU/memory for ${rackAwareSizingNodeCount} nodes (post-failure), ${effectiveStorageResiliency} resiliency`);
+    }
+  }
 
 let storageResiliency;
 let storageConfig;
@@ -719,24 +743,64 @@ let postFailureCapabilities = null;
   let baseCpuSelection;
   let primaryConstraint;
   
-  try {
-    if (totalGHz > 0) {
-      primaryConstraint = "GHz";
-      baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
-    } else if (totalCPU > 0) {
-      primaryConstraint = "Cores";
-      baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
-    } else {
-      throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
-    }
-  } catch (err) {
-    console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
-    console.warn("🔁 Falling back to 8-core sizing attempt…");
+  // If rack-aware, re-select CPU specifically for that fixed node count
+  if (rackAwareNodeCount) {
     try {
-      baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
-      primaryConstraint = "Fallback (8 cores)";
-    } catch (fallbackErr) {
-      throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
+      console.log(`🔄 Selecting CPU for ${rackAwareSizingNodeCount}-node post-failure config (${rackAwareConfig})...`);
+      console.log(`   Requirements: ${totalCPU} cores, filteredCpuList has ${filteredCpuList.length} CPUs`);
+      
+      // For rack-aware, filter CPUs that can meet requirements with the post-failure node count
+      const cpuCoresNeeded = totalCPU + SYS_CPU;
+      const coresPerNode = cpuCoresNeeded / rackAwareSizingNodeCount;
+      
+      console.log(`   Need ${cpuCoresNeeded} total cores with ${rackAwareSizingNodeCount} nodes = ${coresPerNode.toFixed(1)} per node`);
+      
+      // Find CPUs where (cores * 2 threads/core * postFailureNodeCount) >= cpuCoresNeeded
+      const viableCpus = filteredCpuList.filter(cpu => {
+        const totalCoresAvailable = cpu.cores * 2 * rackAwareSizingNodeCount;
+        const fits = totalCoresAvailable >= cpuCoresNeeded;
+        if (fits) {
+          console.log(`   ✓ ${cpu.model} (${cpu.cores}c) provides ${totalCoresAvailable} cores`);
+        }
+        return fits;
+      });
+      
+      console.log(`   Found ${viableCpus.length} viable CPUs`);
+      
+      if (viableCpus.length === 0) {
+        console.warn(`⚠️ No CPUs can meet ${cpuCoresNeeded} cores requirement with ${rackAwareSizingNodeCount} post-failure nodes`);
+        // Fall back to base CPU selection
+      } else {
+        // Pick the CPU with the best efficiency for this node count
+        // Prefer lower core count for cost efficiency, but must meet requirement
+        const bestCpu = viableCpus[0]; // viableCpus should be sorted by core count
+        baseCpuSelection = { cpu: bestCpu, nodesNeeded: rackAwareSizingNodeCount };
+        console.log(`✓ Selected CPU for rack-aware ${rackAwareConfig}: ${bestCpu.model} (${bestCpu.cores} cores) - provides ${bestCpu.cores * 2 * rackAwareSizingNodeCount} total cores`);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Rack-aware CPU selection failed: ${err.message}`);
+    }
+  } else {
+    // Normal (non-rack-aware) CPU selection
+    try {
+      if (totalGHz > 0) {
+        primaryConstraint = "GHz";
+        baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
+      } else if (totalCPU > 0) {
+        primaryConstraint = "Cores";
+        baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
+      } else {
+        throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
+      }
+    } catch (err) {
+      console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
+      console.warn("🔁 Falling back to 8-core sizing attempt…");
+      try {
+        baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
+        primaryConstraint = "Fallback (8 cores)";
+      } catch (fallbackErr) {
+        throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
+      }
     }
   }
 
@@ -755,8 +819,9 @@ let postFailureCapabilities = null;
 
   // 2. Memory constraint: nodes needed to meet memory requirement with utilization limit
   // Memory requirement already adjusted upfront, so calculate nodes for adjusted amount
-  // Find optimal memory config for the adjusted RAM requirement
-  let tempMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, 3, haLevel);
+  // For rack-aware, use the post-failure node count; otherwise use a reasonable estimate
+  const memoryCalcNodeCount = rackAwareSizingNodeCount || 3;
+  let tempMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, memoryCalcNodeCount, haLevel);
   const usableMemoryPerNode = tempMemoryConfig.usableMemoryPerNode;
   
   // Calculate nodes needed for the adjusted memory amount
@@ -764,12 +829,12 @@ let postFailureCapabilities = null;
     ? Math.ceil(adjustedTotalRAM / usableMemoryPerNode) + 1
     : Math.ceil(adjustedTotalRAM / usableMemoryPerNode);
 
-  // 3. Start with max of CPU and memory; storage will be calculated in the loop
-  let nodeCount = Math.max(cpuNodesNeeded, memoryNodesNeeded);
+  // 3. For rack-aware, use the total cluster node count; otherwise use max of constraints
+  let nodeCount = rackAwareNodeCount !== null ? rackAwareNodeCount : Math.max(cpuNodesNeeded, memoryNodesNeeded);
 
-  // Ensure minimum cluster size
+  // Ensure minimum cluster size (only for non-rack-aware)
   const minNodes = sizingConstraints.minClusterSize || 3;
-  if (nodeCount < minNodes) {
+  if (!rackAwareNodeCount && nodeCount < minNodes) {
     nodeCount = minNodes;
   }
 
@@ -791,8 +856,12 @@ let postFailureCapabilities = null;
 
   while (nodeCount <= maxNodes) {
     try {
-      storageResiliency = nodeCount >= 3 ? "3-way" : "2-way";
-      diskConfig = selectDiskConfig(totalStorage, nodeCount, chassisModel);
+      // Use effective resiliency from rack-aware config if provided, otherwise calculate
+      storageResiliency = rackAwareConfig ? effectiveStorageResiliency : (nodeCount >= 3 ? "3-way" : "2-way");
+      // Pass the override resiliency level to selectDiskConfig for rack-aware configs
+      diskConfig = rackAwareConfig 
+        ? selectDiskConfig(totalStorage, nodeCount, chassisModel, effectiveStorageResiliency)
+        : selectDiskConfig(totalStorage, nodeCount, chassisModel);
 
       const clusters = splitClusters(nodeCount);
 
@@ -809,11 +878,13 @@ let postFailureCapabilities = null;
         const reservedTiB = reservedNodes * reservedDiskCount * diskSizeTB * usableRatio;
         const fullTiB = fullNodes * fullDiskCount * diskSizeTB * usableRatio;
         const rawTiB = reservedTiB + fullTiB;
-        const usableTiB = storageResiliency === "3-way"
-          ? rawTiB / 3
-          : storageResiliency === "2-way"
-            ? rawTiB / 2
-            : rawTiB;
+        const usableTiB = storageResiliency === "4-way"
+          ? rawTiB / 4
+          : storageResiliency === "3-way"
+            ? rawTiB / 3
+            : storageResiliency === "2-way"
+              ? rawTiB / 2
+              : rawTiB;
 
         const postFailureNodes = Math.max(size - 1, 1);
         const postFailureCores = postFailureNodes * usableCoresPerNode - SYS_CPU;
@@ -862,6 +933,10 @@ let postFailureCapabilities = null;
       console.warn(`❌ Node count ${nodeCount} failed: ${err.message}`);
     }
 
+    // If rackAwareConfig is set, use the fixed node count only (no increment)
+    if (rackAwareConfig) {
+      break;
+    }
     nodeCount++;
   }
 
@@ -880,16 +955,21 @@ let postFailureCapabilities = null;
 
   // Recalculate CPU selection for the final node count
   // With more nodes available, we might be able to select a lower-core CPU while still meeting requirements
+  // SKIP THIS for rack-aware mode since we already selected the optimal CPU for that fixed node count
   let finalSelectedCpu = selectedCpu;
   try {
-    // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
-    const recalcSelection = totalCPU > 0 
-      ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization)
-      : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
-    
-    if (recalcSelection && recalcSelection.cpu) {
-      finalSelectedCpu = recalcSelection.cpu;
-      console.log(`🔄 CPU recalculated for final ${finalNodeCount} nodes: ${finalSelectedCpu.model} (${finalSelectedCpu.cores} cores, ${finalSelectedCpu.base_clock_GHz} GHz)`);
+    if (!rackAwareConfig) {
+      // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
+      const recalcSelection = totalCPU > 0 
+        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization)
+        : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
+      
+      if (recalcSelection && recalcSelection.cpu) {
+        finalSelectedCpu = recalcSelection.cpu;
+        console.log(`🔄 CPU recalculated for final ${finalNodeCount} nodes: ${finalSelectedCpu.model} (${finalSelectedCpu.cores} cores, ${finalSelectedCpu.base_clock_GHz} GHz)`);
+      }
+    } else {
+      console.log(`✓ Rack-aware mode: keeping selected CPU ${selectedCpu.model} for ${rackAwareConfig} configuration`);
     }
   } catch (err) {
     console.warn("⚠️ CPU recalculation for final node count failed, keeping original CPU selection");

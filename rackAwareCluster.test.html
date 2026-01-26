@@ -452,60 +452,80 @@
         const chassisModelForManual = manualChassisModelInput.value;
         const chassisModel = isAutomatic ? chassisModelForAutomatic : chassisModelForManual;
         
-        // Instead of calling sizeCluster() once, we'll size each rack-aware config independently
-        // This allows each config to find the best CPU/memory/disk combo for its fixed node count
+        // Call sizeCluster() independently for each rack-aware configuration
+        // This allows each config to select its own optimal CPU/memory/disk combo
         
-        // Import sizing functions we need (these should be available from sizingEngine)
-        // We'll create a request for each rack-aware configuration
-        
-        console.log('Sizing for rack-aware configs with requirements:', {
+        console.log('Sizing rack-aware configs with requirements:', {
           cores: requirements.cores,
           memory: requirements.memory,
           storage: requirements.storage,
           chassis: chassisModel
         });
         
-        // For now, call sizeCluster() to get a baseline hardware profile
-        const sizingRequest = {
-          totalCPU: requirements.cores,
-          totalRAM: requirements.memory,
-          totalStorage: requirements.storage,
-          chassisModel: chassisModel,
-          growthPct: 0,
-          haLevel: "n+1",
-          maxCPUUtilization: 0.60,
-          maxMemoryUtilization: 0.60
-        };
-
-        const sizingResult = sizeCluster(sizingRequest);
+        const rackAwareConfigs = ['1+1', '2+2', '3+3', '4+4'];
+        const results = [];
         
-        console.log('Sizing result:', sizingResult);
-        
-        // Step 2: Extract hardware specifications from the sizing result
-        // These become the "per-node" specs we'll use for all rack-aware configs
-        const cpuCoresPerNode = sizingResult.cpuCoresPerSocket; 
-        const cpuGHzPerNode = sizingResult.cpuClockGHz;
-        const memoryGBPerNode = sizingResult.memorySizeGB;
-        const disksPerNode = sizingResult.disksPerNode;
-        const diskSizeTiB = sizingResult.diskSizeTB;
-        const selectedCpuModel = sizingResult.cpuModel;
+        for (const configKey of rackAwareConfigs) {
+          try {
+            console.log(`\n🎯 Sizing ${configKey} configuration...`);
+            
+            const sizingRequest = {
+              totalCPU: requirements.cores,
+              totalRAM: requirements.memory,
+              totalStorage: requirements.storage,
+              chassisModel: chassisModel,
+              rackAwareConfig: configKey,  // NEW: Constrains to this config's fixed node count + resiliency
+              growthPct: 0,
+              haLevel: "n+1",
+              maxCPUUtilization: 0.60,
+              maxMemoryUtilization: 0.60
+            };
 
-        // Step 3: Analyze all 4 rack-aware configurations independently
-        // Each config will find its own optimal disk count
-        const analyzeRequest = {
-          requiredCores: requirements.cores,
-          requiredMemoryGB: requirements.memory,
-          requiredStorageTiB: requirements.storage,
-          cpuCoresPerNode,
-          cpuGHzPerNode,
-          cpuModel: selectedCpuModel,
-          chassisModel
-        };
-
-        console.log('Analyzing all rack-aware configs independently:', analyzeRequest);
-        const results = analyzeAllRackAwareConfigs(analyzeRequest);
-        
-        console.log('Rack-aware analysis results:', results);
+            const sizingResult = sizeCluster(sizingRequest);
+            
+            // Check if sizing succeeded
+            if (!sizingResult || !sizingResult.cpuCoresPerSocket) {
+              results.push({
+                configName: `${configKey}`,
+                configKey: configKey,
+                fits: false,
+                reason: 'CPU/Memory/Storage constraints cannot be met with this configuration'
+              });
+              continue;
+            }
+            
+            console.log(`✓ ${configKey} sizing successful:`, sizingResult);
+            
+            // Extract the result from this specific rack-aware sizing
+            results.push({
+              configName: configKey,
+              configKey: configKey,
+              fits: true,
+              cpuModel: sizingResult.cpuModel,
+              cpuCoresPerNode: sizingResult.cpuCoresPerSocket,
+              cpuGHzPerNode: sizingResult.cpuClockGHz,
+              memoryGBPerNode: sizingResult.memorySizeGB,
+              disksPerNode: sizingResult.disksPerNode,
+              diskSizeTiB: sizingResult.diskSizeTB,
+              totalNodes: sizingResult.nodeCount,
+              totalCores: sizingResult.totalUsableCores,
+              totalMemory: sizingResult.totalUsableMemory,
+              totalUsableStorage: sizingResult.usableTiB,
+              coreUtilization: (requirements.cores / sizingResult.totalUsableCores * 100).toFixed(1),
+              memoryUtilization: (requirements.memory / sizingResult.totalUsableMemory * 100).toFixed(1),
+              storageUtilization: (requirements.storage / sizingResult.usableTiB * 100).toFixed(1)
+            });
+            
+          } catch (err) {
+            console.warn(`❌ ${configKey} sizing failed: ${err.message}`);
+            results.push({
+              configName: configKey,
+              configKey: configKey,
+              fits: false,
+              reason: err.message
+            });
+          }
+        }
 
         // Check if any config fits
         const fittingConfigs = results.filter(r => r.fits);
@@ -546,31 +566,23 @@
             configSummary.innerHTML = `
               <div style="background: #f0f4f8; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px;">
                 <div><strong>Chassis:</strong> ${chassisModel}</div>
-                <div><strong>CPU:</strong> ${selectedCpuModel} (${cpuCoresPerNode} cores @ ${cpuGHzPerNode} GHz)</div>
-                <div><strong>Memory:</strong> ${memoryGBPerNode} GB per node</div>
-                <div><strong>Storage:</strong> ${config.sizedConfig.disksPerNode} drives × ${config.sizedConfig.diskSizeTiB} TiB each</div>
+                <div><strong>CPU:</strong> ${config.cpuModel} (${config.cpuCoresPerNode} cores @ ${config.cpuGHzPerNode} GHz)</div>
+                <div><strong>Memory:</strong> ${config.memoryGBPerNode} GB per node</div>
+                <div><strong>Storage:</strong> ${config.disksPerNode} drives × ${config.diskSizeTiB} TiB each</div>
               </div>
             `;
 
             // Compute Resources
             const computeSection = document.createElement('div');
             computeSection.innerHTML = `
-              <strong style="color: #007acc;">Compute Resources (Normal)</strong>
-              <div class="resource-item">
-                <span>Nodes:</span>
-                <span>${config.spec.topology.totalNodes}</span>
-              </div>
+              <strong style="color: #007acc;">Compute Resources</strong>
               <div class="resource-item">
                 <span>Total Cores:</span>
-                <span>${config.spec.compute.normal.usableCores} <span class="utilization">(✓ ${config.fitBreakdown.cores.utilization})</span></span>
-              </div>
-              <div class="resource-item">
-                <span>Total GHz:</span>
-                <span>${config.spec.compute.normal.usableGHz}</span>
+                <span>${config.totalCores} <span class="utilization">(${config.coreUtilization}%)</span></span>
               </div>
               <div class="resource-item">
                 <span>Total Memory:</span>
-                <span>${config.spec.compute.normal.usableMemoryGB} GB <span class="utilization">(✓ ${config.fitBreakdown.memory.utilization})</span></span>
+                <span>${config.totalMemory} GB <span class="utilization">(${config.memoryUtilization}%)</span></span>
               </div>
             `;
 
@@ -580,30 +592,19 @@
               <hr style="margin: 10px 0;">
               <strong style="color: #007acc;">Storage</strong>
               <div class="resource-item">
-                <span>Resiliency:</span>
-                <span>${config.spec.storage.volumeResiliency}</span>
-              </div>
-              <div class="resource-item">
-                <span>Raw Total:</span>
-                <span>${config.spec.storage.totalRawTiB} TiB</span>
-              </div>
-              <div class="resource-item">
-                <span>Reserved:</span>
-                <span>${config.spec.storage.reservedTiB} TiB (${config.spec.storage.reservedDrives} drives)</span>
-              </div>
-              <div class="resource-item">
                 <span>Usable:</span>
-                <span>${config.spec.storage.usableCapacityTiB} TiB <span class="utilization">(✓ ${config.fitBreakdown.storage.utilization})</span></span>
+                <span>${config.totalUsableStorage.toFixed(1)} TiB <span class="utilization">(${config.storageUtilization}%)</span></span>
               </div>
             `;
 
             // Fault Tolerance
             const faultSection = document.createElement('div');
+            const resiliency = (config.configKey === '1+1') ? '2-way mirror' : '4-way mirror';
             faultSection.innerHTML = `
               <hr style="margin: 10px 0;">
               <strong style="color: #007acc;">Fault Tolerance</strong>
               <div style="font-size: 12px; color: #666; margin-top: 8px;">
-                ${config.faultTolerance.description}
+                <div>Resiliency: <strong>${resiliency}</strong></div>
               </div>
             `;
 

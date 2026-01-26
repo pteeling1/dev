@@ -431,7 +431,7 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
 function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel, overrideResiliencyLevel = null) {
   const resiliencyLevel = overrideResiliencyLevel || (nodeCount < 3 ? "2-way" : "3-way");
   console.log(`🔍 selectDiskConfig: requiredUsableTiB=${requiredUsableTiB}, nodeCount=${nodeCount}, override=${overrideResiliencyLevel}, using=${resiliencyLevel}`);
-  const allowSmallFootprint = requiredUsableTiB < 3;
+  const allowSmallFootprint = requiredUsableTiB < 10; // Allow smaller drive counts for sub-10TiB requirements
 
   
 
@@ -863,28 +863,38 @@ let postFailureCapabilities = null;
         ? selectDiskConfig(totalStorage, nodeCount, chassisModel, effectiveStorageResiliency)
         : selectDiskConfig(totalStorage, nodeCount, chassisModel);
 
-      const clusters = splitClusters(nodeCount);
+      // For rack-aware configs, do NOT split clusters - keep the fixed topology
+      const clusters = rackAwareConfig ? [nodeCount] : splitClusters(nodeCount);
 
       const clusterSummaries = clusters.map((size, index) => {
-        const reservedNodes = Math.min(size, 4);
-        const reservedDrives = reservedNodes * 1;
-        const fullNodes = size - reservedNodes;
-        const reservedDiskCount = diskConfig.disksPerNode - 1;
-        const totalDrives = size * diskConfig.disksPerNode;
-        const dataDrives = totalDrives - reservedDrives;
-        const fullDiskCount = diskConfig.disksPerNode;
-        const diskSizeTB = diskConfig.diskSizeTB;
-        const usableRatio = 1 / 1.1024;
-        const reservedTiB = reservedNodes * reservedDiskCount * diskSizeTB * usableRatio;
-        const fullTiB = fullNodes * fullDiskCount * diskSizeTB * usableRatio;
-        const rawTiB = reservedTiB + fullTiB;
-        const usableTiB = storageResiliency === "4-way"
-          ? rawTiB / 4
-          : storageResiliency === "3-way"
-            ? rawTiB / 3
-            : storageResiliency === "2-way"
-              ? rawTiB / 2
-              : rawTiB;
+        // For single-cluster sizing (most common), use diskConfig.usableTiB directly
+        // For multi-cluster splitting, recalculate proportionally
+        let usableTiB;
+        if (clusters.length === 1) {
+          // Single cluster - use the exact calculation from selectDiskConfig()
+          usableTiB = diskConfig.usableTiB;
+        } else {
+          // Multiple clusters - proportional allocation
+          const reservedNodes = Math.min(size, 4);
+          const reservedDrives = reservedNodes * 1;
+          const fullNodes = size - reservedNodes;
+          const reservedDiskCount = diskConfig.disksPerNode - 1;
+          const totalDrives = size * diskConfig.disksPerNode;
+          const dataDrives = totalDrives - reservedDrives;
+          const fullDiskCount = diskConfig.disksPerNode;
+          const diskSizeTB = diskConfig.diskSizeTB;
+          const usableRatio = 1 / 1.1024;
+          const reservedTiB = reservedNodes * reservedDiskCount * diskSizeTB * usableRatio;
+          const fullTiB = fullNodes * fullDiskCount * diskSizeTB * usableRatio;
+          const rawTiB = reservedTiB + fullTiB;
+          usableTiB = storageResiliency === "4-way"
+            ? rawTiB / 4
+            : storageResiliency === "3-way"
+              ? rawTiB / 3
+              : storageResiliency === "2-way"
+                ? rawTiB / 2
+                : rawTiB;
+        }
 
         const postFailureNodes = Math.max(size - 1, 1);
         const postFailureCores = postFailureNodes * usableCoresPerNode - SYS_CPU;
@@ -895,18 +905,18 @@ let postFailureCapabilities = null;
         return {
           name: `Instance ${String.fromCharCode(65 + index)}`,
           nodeCount: size,
-          reservedNodes,
+          reservedNodes: Math.min(size, 4),
           usableCores: size * usableCoresPerNode - SYS_CPU,
           usableGHz: (size * usableCoresPerNode - SYS_CPU) * selectedCpu.base_clock_GHz,
           usableMemoryGB: size * memoryConfig.usableMemoryPerNode,
           usableTiB: parseFloat(usableTiB.toFixed(2)),
           resiliency: storageResiliency,
           switchMode,
-          diskSizeTB,
+          diskSizeTB: diskConfig.diskSizeTB,
           disksPerNode: diskConfig.disksPerNode,
-          rawTiB: parseFloat(rawTiB.toFixed(2)),
-          reserveTiB: parseFloat(reservedTiB.toFixed(2)),
-          resiliencyTiB: parseFloat(diskConfig.resiliencyTiB.toFixed(2)),
+          rawTiB: diskConfig.disksPerNode * size * diskConfig.diskSizeTB / 1.1024,
+          reserveTiB: diskConfig.reserveTiB,
+          resiliencyTiB: diskConfig.resiliencyTiB,
           postFailure: {
             activeNodes: postFailureNodes,
             usableCores: postFailureCores,

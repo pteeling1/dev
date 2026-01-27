@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microsoft 365 Local Configurator - AX Calculator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/custom_style.css" />
+  <link rel="stylesheet" href="css/color-palette.css" />
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .container-main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .header-section {
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 1rem;
+    }
+    .header-section h1 {
+      color: #000;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    .header-section p {
+      color: #666;
+      margin: 0;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .role-card {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .role-card h5 {
+      color: #000;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .role-badge {
+      display: inline-block;
+      background: #007acc;
+      color: white;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+    .form-label {
+      font-weight: 500;
+      color: #333;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .results-section {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+    .results-section h4 {
+      color: #000;
+      font-weight: bold;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid #007acc;
+      padding-bottom: 0.5rem;
+    }
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+    .result-box {
+      background: #f8f9fa;
+      border-left: 4px solid #6a9955;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+    .result-box h6 {
+      color: #666;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+    .result-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #000;
+    }
+    .result-unit {
+      font-size: 0.9rem;
+      color: #999;
+      margin-left: 0.25rem;
+    }
+    .role-details {
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+    }
+    .role-details p {
+      margin: 0.5rem 0;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .disconnected-ops-box {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 6px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .disconnected-ops-box h5 {
+      color: #16a34a;
+      margin-bottom: 1rem;
+    }
+    .disconnected-ops-box p {
+      color: #4b5563;
+      margin: 0.5rem 0;
+    }
+    .btn-calculate {
+      background: #000;
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    .btn-calculate:hover {
+      background: #333;
+      color: white;
+      text-decoration: none;
+    }
+    @media (max-width: 1024px) {
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container-main">
+    <!-- Header -->
+    <div class="header-section">
+      <h1><i class="bi bi-building"></i> Microsoft 365 Local Configurator</h1>
+      <p>Configure hardware for Exchange Server, SharePoint Server, and Skype for Business Server on Azure Local infrastructure</p>
+      <a href="advanced.html" style="color: #666; text-decoration: none; font-size: 0.9rem;">
+        <i class="bi bi-arrow-left"></i> Back to Advanced
+      </a>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="config-grid">
+      <!-- SharePoint + SQL Role (3 servers) -->
+      <div class="role-card">
+        <h5>
+          <i class="bi bi-diagram-3"></i> SharePoint + SQL
+          <span class="role-badge">3 Servers</span>
+        </h5>
+        
+        <label class="form-label">Chassis Model</label>
+        <select id="sharepointChassis" class="form-select">
+          <option value="AX 670">AX 670</option>
+          <option value="AX 770" selected>AX 770</option>
+        </select>
+
+        <label class="form-label">CPU Model</label>
+        <select id="sharepointCpu" class="form-select">
+          <option value="">Loading CPUs...</option>
+        </select>
+
+        <label class="form-label">Memory per Node</label>
+        <select id="sharepointMemory" class="form-select">
+          <option value="">Loading memory options...</option>
+        </select>
+
+        <label class="form-label">Disk Size</label>
+        <select id="sharepointDiskSize" class="form-select">
+          <option value="">Loading disk options...</option>
+        </select>
+
+        <small class="text-muted d-block">
+          16 capacity disks per node (fixed)
+        </small>
+
+        <div class="role-details">
+          <p><strong>Purpose:</strong> SharePoint Server, SQL Server databases</p>
+          <p><strong>Configuration:</strong> 3-node Azure Local cluster</p>
+        </div>
+
+        <button class="btn-calculate" onclick="calculateAll()">Calculate</button>
+      </div>
+
+      <!-- Exchange Mailbox Role (4 servers) -->
+      <div class="role-card">
+        <h5>
+          <i class="bi bi-envelope"></i> Exchange Mailbox
+          <span class="role-badge">4 Servers</span>
+        </h5>
+        
+        <label class="form-label">Chassis Model</label>
+        <select id="exchangeMbxChassis" class="form-select">
+          <option value="AX 670">AX 670</option>
+          <option value="AX 770" selected>AX 770</option>
+        </select>
+
+        <label class="form-label">CPU Model</label>
+        <select id="exchangeMbxCpu" class="form-select">
+          <option value="">Loading CPUs...</option>
+        </select>
+
+        <label class="form-label">Memory per Node</label>
+        <select id="exchangeMbxMemory" class="form-select">
+          <option value="">Loading memory options...</option>
+        </select>
+
+        <label class="form-label">Disk Size</label>
+        <select id="exchangeMbxDiskSize" class="form-select">
+          <option value="">Loading disk options...</option>
+        </select>
+
+        <small class="text-muted d-block">
+          16 capacity disks per node (fixed)
+        </small>
+
+        <div class="role-details">
+          <p><strong>Purpose:</strong> Exchange mailbox storage and databases</p>
+          <p><strong>Configuration:</strong> 4 single-node clusters</p>
+        </div>
+
+        <button class="btn-calculate" onclick="calculateAll()">Calculate</button>
+      </div>
+
+      <!-- Exchange Edge Role (2 servers) -->
+      <div class="role-card">
+        <h5>
+          <i class="bi bi-arrow-left-right"></i> Exchange Edge
+          <span class="role-badge">2 Servers</span>
+        </h5>
+        
+        <label class="form-label">Chassis Model</label>
+        <select id="exchangeEdgeChassis" class="form-select">
+          <option value="AX 670">AX 670</option>
+          <option value="AX 770" selected>AX 770</option>
+        </select>
+
+        <label class="form-label">CPU Model</label>
+        <select id="exchangeEdgeCpu" class="form-select">
+          <option value="">Loading CPUs...</option>
+        </select>
+
+        <label class="form-label">Memory per Node</label>
+        <select id="exchangeEdgeMemory" class="form-select">
+          <option value="">Loading memory options...</option>
+        </select>
+
+        <label class="form-label">Disk Size</label>
+        <select id="exchangeEdgeDiskSize" class="form-select">
+          <option value="">Loading disk options...</option>
+        </select>
+
+        <small class="text-muted d-block">
+          16 capacity disks per node (fixed)
+        </small>
+
+        <div class="role-details">
+          <p><strong>Purpose:</strong> Exchange edge transport, mail hygiene</p>
+          <p><strong>Configuration:</strong> 2 single-node clusters</p>
+        </div>
+
+        <button class="btn-calculate" onclick="calculateAll()">Calculate</button>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="results-section">
+      <h4><i class="bi bi-check-circle"></i> Infrastructure Requirements (9 Servers Total)</h4>
+      
+      <div class="results-grid">
+        <div class="result-box">
+          <h6>Total Physical Servers</h6>
+          <div class="result-value">9</div>
+        </div>
+        
+        <div class="result-box">
+          <h6>Total CPU Cores</h6>
+          <div class="result-value"><span id="totalCores">432</span><span class="result-unit">cores</span></div>
+        </div>
+
+        <div class="result-box">
+          <h6>Total Memory</h6>
+          <div class="result-value"><span id="totalMemory">4608</span><span class="result-unit">GB</span></div>
+        </div>
+
+        <div class="result-box">
+          <h6>Total Capacity Disks</h6>
+          <div class="result-value"><span id="totalDisks">144</span><span class="result-unit">disks</span></div>
+        </div>
+
+        <div class="result-box">
+          <h6>Total Raw Storage</h6>
+          <div class="result-value"><span id="totalStorage">576</span><span class="result-unit">TB</span></div>
+        </div>
+
+        <div class="result-box">
+          <h6>Total Usable Capacity</h6>
+          <div class="result-value"><span id="totalUsableStorage">246.5</span><span class="result-unit">TB</span></div>
+          <div style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">(<span id="totalUsableStorageTiB">224.1</span> TiB)</div>
+        </div>
+      </div>
+
+      <!-- Disconnected Operations Option -->
+      <div style="margin-top: 2rem; padding: 1.5rem; background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px;">
+        <p style="color: #16a34a; margin: 0; font-size: 0.9rem;">
+          <i class="bi bi-check-circle"></i> <strong>Note:</strong> Microsoft 365 Local hardware requirements include disconnected operations support. These specifications are pre-optimized for fully disconnected deployments.
+        </p>
+      </div>
+
+      <!-- Role Breakdown Table -->
+      <div style="margin-top: 2rem; overflow-x: auto;">
+        <h5 style="margin-bottom: 1rem;">Role Breakdown</h5>
+        <table class="table table-sm table-hover">
+          <thead class="table-light">
+            <tr>
+              <th>Role</th>
+              <th>Servers</th>
+              <th>CPU/Node</th>
+              <th>Total Cores</th>
+              <th>Memory/Node</th>
+              <th>Total Memory</th>
+              <th>Disks/Node</th>
+              <th>Disk Size</th>
+              <th>Usable Capacity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>SharePoint + SQL</strong></td>
+              <td id="br-sharepoint-servers">3</td>
+              <td id="br-sharepoint-cpu">48</td>
+              <td id="br-sharepoint-cores">72</td>
+              <td id="br-sharepoint-mem">512 GB</td>
+              <td id="br-sharepoint-total-mem">1,536 GB</td>
+              <td id="br-sharepoint-disks">16</td>
+              <td id="br-sharepoint-disk-size">3.84 TB</td>
+              <td id="br-sharepoint-capacity">61.4 TB</td>
+            </tr>
+            <tr>
+              <td><strong>Exchange Mailbox</strong></td>
+              <td id="br-mbx-servers">4</td>
+              <td id="br-mbx-cpu">48</td>
+              <td id="br-mbx-cores">96</td>
+              <td id="br-mbx-mem">512 GB</td>
+              <td id="br-mbx-total-mem">2,048 GB</td>
+              <td id="br-mbx-disks">16</td>
+              <td id="br-mbx-disk-size">3.84 TB</td>
+              <td id="br-mbx-capacity">122.9 TB</td>
+            </tr>
+            <tr>
+              <td><strong>Exchange Edge</strong></td>
+              <td id="br-edge-servers">2</td>
+              <td id="br-edge-cpu">48</td>
+              <td id="br-edge-cores">48</td>
+              <td id="br-edge-mem">512 GB</td>
+              <td id="br-edge-total-mem">1,024 GB</td>
+              <td id="br-edge-disks">16</td>
+              <td id="br-edge-disk-size">3.84 TB</td>
+              <td id="br-edge-capacity">61.4 TB</td>
+            </tr>
+            <tr class="table-active">
+              <td><strong>TOTAL</strong></td>
+              <td><strong>9</strong></td>
+              <td colspan="1"></td>
+              <td id="br-total-cores"><strong>216</strong></td>
+              <td colspan="1"></td>
+              <td id="br-total-memory"><strong>4,608 GB</strong></td>
+              <td colspan="2"></td>
+              <td id="br-total-storage"><strong>144 × 3.84TB</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Architecture Diagram -->
+      <div style="margin-top: 2rem; padding: 2rem; background: white; border: 1px solid #ddd; border-radius: 8px; text-align: center;">
+        <h5 style="margin-bottom: 1.5rem; color: #000; font-weight: bold;">
+          <i class="bi bi-diagram-3-fill"></i> Microsoft 365 Local Architecture
+        </h5>
+        <img src="images/365 disconnected.png" alt="Microsoft 365 Local Architecture" style="max-width: 100%; height: auto; border-radius: 6px;">
+        <p style="margin-top: 1rem; color: #666; font-size: 0.9rem;">9-server baseline: 3 SharePoint+SQL cluster, 4 Exchange mailbox single-node, 2 Exchange edge single-node</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { cpuList as cpuDataNew } from './js/17GcpuData.js';
+    import { diskSizesTB, getValidMemoryOptions } from './js/hardwareConfig.js';
+
+    // Map to store DIMM configurations
+    let memoryDimmMap = {};
+
+    // Initialize dropdowns on page load
+    async function initializeDropdowns() {
+      // Populate CPU dropdowns - only 24 cores or better
+      const validCpus = cpuDataNew.filter(cpu => cpu.cores >= 24);
+      const cpuOptions = validCpus.map(cpu => `<option value="${cpu.cores}">${cpu.model} (${cpu.cores} core, ${cpu.base_clock_GHz} GHz)</option>`).join('');
+      document.getElementById('sharepointCpu').innerHTML = cpuOptions;
+      document.getElementById('exchangeMbxCpu').innerHTML = cpuOptions;
+      document.getElementById('exchangeEdgeCpu').innerHTML = cpuOptions;
+
+      // Populate memory dropdowns - handle both array of numbers and array of objects
+      let memoryValues = [];
+      try {
+        const memOptions = getValidMemoryOptions();
+        if (Array.isArray(memOptions)) {
+          // Convert to totalGB values, filter for 512GB or larger, remove duplicates
+          memoryDimmMap = {};
+          memOptions.forEach(item => {
+            const totalGB = typeof item === 'number' ? item : (item.totalGB || parseInt(item));
+            if (totalGB >= 512 && !memoryDimmMap[totalGB]) {
+              memoryDimmMap[totalGB] = {
+                dimmCount: item.dimmCount,
+                dimmSize: item.dimmSize
+              };
+            }
+          });
+          memoryValues = Object.keys(memoryDimmMap).map(Number).sort((a, b) => a - b);
+        }
+      } catch (e) {
+        // Fallback: use reasonable defaults
+        memoryValues = [512, 768, 1024, 1536, 2048];
+        memoryDimmMap = {
+          512: { dimmCount: 16, dimmSize: 32 },
+          768: { dimmCount: 24, dimmSize: 32 },
+          1024: { dimmCount: 32, dimmSize: 32 },
+          1536: { dimmCount: 32, dimmSize: 48 },
+          2048: { dimmCount: 32, dimmSize: 64 }
+        };
+      }
+      
+      const memoryOptions = memoryValues.map(mem => {
+        const config = memoryDimmMap[mem];
+        const configStr = config ? ` (${config.dimmCount} × ${config.dimmSize}GB)` : '';
+        return `<option value="${mem}">${mem} GB${configStr}</option>`;
+      }).join('');
+      document.getElementById('sharepointMemory').innerHTML = memoryOptions;
+      document.getElementById('exchangeMbxMemory').innerHTML = memoryOptions;
+      document.getElementById('exchangeEdgeMemory').innerHTML = memoryOptions;
+
+      // Populate disk size dropdowns - only 3.84TB and larger
+      const validDiskSizes = diskSizesTB.filter(disk => disk >= 3.84);
+      const diskOptions = validDiskSizes.map(disk => `<option value="${disk}">${disk} TB</option>`).join('');
+      document.getElementById('sharepointDiskSize').innerHTML = diskOptions;
+      document.getElementById('exchangeMbxDiskSize').innerHTML = diskOptions;
+      document.getElementById('exchangeEdgeDiskSize').innerHTML = diskOptions;
+
+      // Set default to 3.84TB if available
+      const defaultDisk = validDiskSizes[0] || 3.84;
+      document.getElementById('sharepointDiskSize').value = defaultDisk;
+      document.getElementById('exchangeMbxDiskSize').value = defaultDisk;
+      document.getElementById('exchangeEdgeDiskSize').value = defaultDisk;
+
+      // Add event listeners
+      document.getElementById('sharepointMemory').addEventListener('change', calculateAll);
+      document.getElementById('sharepointDiskSize').addEventListener('change', calculateAll);
+      document.getElementById('exchangeMbxMemory').addEventListener('change', calculateAll);
+      document.getElementById('exchangeMbxDiskSize').addEventListener('change', calculateAll);
+      document.getElementById('exchangeEdgeMemory').addEventListener('change', calculateAll);
+      document.getElementById('exchangeEdgeDiskSize').addEventListener('change', calculateAll);
+
+      // Initial calculation
+      calculateAll();
+    }
+
+    function getMemoryConfigString(totalGB) {
+      const config = memoryDimmMap[totalGB];
+      return config ? `${config.dimmCount} × ${config.dimmSize}GB` : '';
+    }
+
+    window.calculateAll = function() {
+      // Get SharePoint values
+      const spServers = 3;
+      const spCores = parseInt(document.getElementById('sharepointCpu').value || 24);
+      const spMemory = parseInt(document.getElementById('sharepointMemory').value || 512);
+      const spDiskSize = parseFloat(document.getElementById('sharepointDiskSize').value || 3.84);
+
+      // Get Exchange Mailbox values
+      const mbxServers = 4;
+      const mbxCores = parseInt(document.getElementById('exchangeMbxCpu').value || 24);
+      const mbxMemory = parseInt(document.getElementById('exchangeMbxMemory').value || 512);
+      const mbxDiskSize = parseFloat(document.getElementById('exchangeMbxDiskSize').value || 3.84);
+
+      // Get Exchange Edge values
+      const edgeServers = 2;
+      const edgeCores = parseInt(document.getElementById('exchangeEdgeCpu').value || 24);
+      const edgeMemory = parseInt(document.getElementById('exchangeEdgeMemory').value || 512);
+      const edgeDiskSize = parseFloat(document.getElementById('exchangeEdgeDiskSize').value || 3.84);
+
+      // Fixed values
+      const disksPerNode = 16;
+      const coresPerServer = 24; // Dual socket Xeon
+      const bootDisksPerServer = 2;
+
+      // Calculate totals
+      const totalServers = spServers + mbxServers + edgeServers;
+      const totalCores = (spServers * spCores) + (mbxServers * mbxCores) + (edgeServers * edgeCores);
+      const totalMemory = (spServers * spMemory) + (mbxServers * mbxMemory) + (edgeServers * edgeMemory);
+      const totalCapacityDisks = totalServers * disksPerNode;
+      const totalBootDisks = totalServers * bootDisksPerServer;
+      
+      // Storage calculation - use sizing engine logic
+      const spPayload = { nodes: spServers, diskCount: disksPerNode, diskSize: spDiskSize };
+      const mbxPayload = { nodes: mbxServers, diskCount: disksPerNode, diskSize: mbxDiskSize };
+      const edgePayload = { nodes: edgeServers, diskCount: disksPerNode, diskSize: edgeDiskSize };
+      
+      const spRawStorageValue = spServers * disksPerNode * spDiskSize;
+      const mbxRawStorageValue = mbxServers * disksPerNode * mbxDiskSize;
+      const edgeRawStorageValue = edgeServers * disksPerNode * edgeDiskSize;
+      const totalRawStorage = spRawStorageValue + mbxRawStorageValue + edgeRawStorageValue;
+      
+      const spRawStorage = parseFloat(calculateUsableStorage(spPayload.nodes, spPayload.diskCount, spPayload.diskSize, '3-way').usableTB);
+      const mbxRawStorage = parseFloat(calculateUsableStorage(mbxPayload.nodes, mbxPayload.diskCount, mbxPayload.diskSize, '2-way').usableTB);
+      const edgeRawStorage = parseFloat(calculateUsableStorage(edgePayload.nodes, edgePayload.diskCount, edgePayload.diskSize, '2-way').usableTB);
+      const totalUsableStorage = spRawStorage + mbxRawStorage + edgeRawStorage;
+
+      // Update summary
+      document.getElementById('totalCores').textContent = totalCores;
+      document.getElementById('totalMemory').textContent = totalMemory.toLocaleString();
+      document.getElementById('totalDisks').textContent = totalCapacityDisks;
+      document.getElementById('totalStorage').textContent = totalRawStorage.toFixed(1);
+      const totalUsableTiB = (totalUsableStorage / 1.099511627776).toFixed(1);
+      document.getElementById('totalUsableStorage').textContent = totalUsableStorage.toFixed(1);
+      document.getElementById('totalUsableStorageTiB').textContent = totalUsableTiB;
+
+      // Update role breakdown table with DIMM info
+      const spMemConfig = getMemoryConfigString(spMemory);
+      const mbxMemConfig = getMemoryConfigString(mbxMemory);
+      const edgeMemConfig = getMemoryConfigString(edgeMemory);
+
+      document.getElementById('br-sharepoint-cpu').textContent = spCores;
+      document.getElementById('br-sharepoint-cores').textContent = spServers * spCores;
+      document.getElementById('br-sharepoint-mem').textContent = spMemory + ' GB' + (spMemConfig ? ` (${spMemConfig})` : '');
+      document.getElementById('br-sharepoint-total-mem').textContent = (spServers * spMemory).toLocaleString() + ' GB';
+      document.getElementById('br-sharepoint-disk-size').textContent = spDiskSize + ' TB';
+      if (typeof spRawStorage === 'number' && spRawStorage > 0) {
+        const spCapacityTiB = (spRawStorage / 1.099511627776).toFixed(1);
+        document.getElementById('br-sharepoint-capacity').textContent = spRawStorage.toFixed(1) + ' TB (' + spCapacityTiB + ' TiB)';
+      }
+
+      document.getElementById('br-mbx-cpu').textContent = mbxCores;
+      document.getElementById('br-mbx-cores').textContent = mbxServers * mbxCores;
+      document.getElementById('br-mbx-mem').textContent = mbxMemory + ' GB' + (mbxMemConfig ? ` (${mbxMemConfig})` : '');
+      document.getElementById('br-mbx-total-mem').textContent = (mbxServers * mbxMemory).toLocaleString() + ' GB';
+      document.getElementById('br-mbx-disk-size').textContent = mbxDiskSize + ' TB';
+      if (typeof mbxRawStorage === 'number' && mbxRawStorage > 0) {
+        const mbxCapacityTiB = (mbxRawStorage / 1.099511627776).toFixed(1);
+        document.getElementById('br-mbx-capacity').textContent = mbxRawStorage.toFixed(1) + ' TB (' + mbxCapacityTiB + ' TiB)';
+      }
+
+      document.getElementById('br-edge-cpu').textContent = edgeCores;
+      document.getElementById('br-edge-cores').textContent = edgeServers * edgeCores;
+      document.getElementById('br-edge-mem').textContent = edgeMemory + ' GB' + (edgeMemConfig ? ` (${edgeMemConfig})` : '');
+      document.getElementById('br-edge-total-mem').textContent = (edgeServers * edgeMemory).toLocaleString() + ' GB';
+      document.getElementById('br-edge-disk-size').textContent = edgeDiskSize + ' TB';
+      if (typeof edgeRawStorage === 'number' && edgeRawStorage > 0) {
+        const edgeCapacityTiB = (edgeRawStorage / 1.099511627776).toFixed(1);
+        document.getElementById('br-edge-capacity').textContent = edgeRawStorage.toFixed(1) + ' TB (' + edgeCapacityTiB + ' TiB)';
+      }
+
+      document.getElementById('br-total-cores').textContent = totalCores;
+      document.getElementById('br-total-memory').textContent = totalMemory.toLocaleString() + ' GB';
+      const totalCapacityTiB = (totalUsableStorage / 1.099511627776).toFixed(1);
+      document.getElementById('br-total-storage').textContent = totalUsableStorage.toFixed(1) + ' TB (' + totalCapacityTiB + ' TiB)';
+    };
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', initializeDropdowns);
+  </script>
+  <script type="module">
+    import { calculateUsableStorage } from './js/calculateUsableStorage.js';
+    window.calculateUsableStorage = calculateUsableStorage;
+  </script>
+</body>
+</html>

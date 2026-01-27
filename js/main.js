@@ -1045,6 +1045,8 @@ document.querySelectorAll("#sizingModePills .nav-link").forEach(pill => {
     const vmSection = document.getElementById("vmSizingSection");
     const infraSection = document.getElementById("infraSizingSection");
     const workloadSection = document.getElementById("workloadSizingSection");
+    const disconnectedOpsCheckbox = document.getElementById("disconnectedOpsCheckbox");
+    const disconnectedOpsContainer = disconnectedOpsCheckbox?.closest(".form-check");
 
     // Hide all sections
     vmSection.classList.add("d-none");
@@ -1053,10 +1055,18 @@ document.querySelectorAll("#sizingModePills .nav-link").forEach(pill => {
 
     if (mode === "vm") {
       vmSection.classList.remove("d-none");
+      // Show disconnected ops for VM mode
+      if (disconnectedOpsContainer) disconnectedOpsContainer.classList.remove("d-none");
     } else if (mode === "infra") {
       infraSection.classList.remove("d-none");
+      // Show disconnected ops for Infra mode
+      if (disconnectedOpsContainer) disconnectedOpsContainer.classList.remove("d-none");
     } else if (mode === "workload") {
       workloadSection.classList.remove("d-none");
+      // Hide disconnected ops for Workload mode (AVD not supported)
+      if (disconnectedOpsContainer) disconnectedOpsContainer.classList.add("d-none");
+      // Uncheck if it was checked
+      if (disconnectedOpsCheckbox) disconnectedOpsCheckbox.checked = false;
 
       // Auto-populate if empty
       const list = document.getElementById("workloadList");

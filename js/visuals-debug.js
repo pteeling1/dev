@@ -185,6 +185,9 @@ if (nodeRow && grid) {
 
 svg.innerHTML = "";
 
+    // Initialize rough.js for hand-drawn effect
+    const RC = window.rough?.svg(svg);
+
     const nodeCards = [...document.querySelectorAll(".node-row .node-card")];
     const switchCards = [
       ...document.querySelectorAll("#switchRowTop .node-card"),
@@ -246,14 +249,26 @@ svg.innerHTML = "";
           ];
 
       segments.forEach(([xStart, yStart, xEnd, yEnd]) => {
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", xStart);
-        line.setAttribute("y1", yStart);
-        line.setAttribute("x2", xEnd);
-        line.setAttribute("y2", yEnd);
-        line.setAttribute("stroke", color);
-        line.setAttribute("stroke-width", "2");
-        svg.appendChild(line);
+        if (RC) {
+          // Use rough.js for hand-drawn effect
+          const roughLine = RC.line(xStart, yStart, xEnd, yEnd, {
+            stroke: color,
+            strokeWidth: 2,
+            roughness: 1.2,  // Adjust for sketch intensity (0-3)
+            bowing: 1        // Slight curve for organic feel
+          });
+          svg.appendChild(roughLine);
+        } else {
+          // Fallback to normal SVG if rough.js fails to load
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", xStart);
+          line.setAttribute("y1", yStart);
+          line.setAttribute("x2", xEnd);
+          line.setAttribute("y2", yEnd);
+          line.setAttribute("stroke", color);
+          line.setAttribute("stroke-width", "2");
+          svg.appendChild(line);
+        }
       });
     });
 
@@ -277,10 +292,10 @@ function updateNodeStack()
 
   const nodeType = document.querySelector('input[name="nodeType"]:checked')?.value || "AX 760";
   const imageMap = {
-    "AX 760": "760.png",
-    "AX 660": "660.png",
-    "AX 670": "670.png",
-    "AX 770": "770.png"
+    "AX 760": "760new.png",
+    "AX 660": "660new.png",
+    "AX 670": "670new.png",
+    "AX 770": "770new.png"
   };
   const imagePath = imageMap[nodeType] ? `./images/${imageMap[nodeType]}` : null;
 
@@ -294,6 +309,9 @@ function updateNodeStack()
     img.src = imagePath;
     img.alt = `Node ${i} (${nodeType})`;
     img.className = "node-image";
+    img.style.maxHeight = "250px";
+    img.style.maxWidth = "100%";
+    img.style.objectFit = "contain";
     node.appendChild(img);
   }
 
@@ -376,25 +394,25 @@ function updateSwitchRow() {
 
   if (isSwitchless) {
     switches = [
-      { label: "VM Switch A", img: "s5248f.png" },
-      { label: "VM Switch B", img: "s5248f.png" }
+      { label: "VM Switch A", img: "switchnew.png" },
+      { label: "VM Switch B", img: "switchnew.png" }
     ];
   } else if (isConverged) {
     switches = [
-      { label: "Switch A", img: "s5248f.png" },
-      { label: "Switch B", img: "s5248f.png" }
+      { label: "Switch A", img: "switchnew.png" },
+      { label: "Switch B", img: "switchnew.png" }
     ];
   } else if (isSeparate) {
     switches = [
-      { label: "VM Switch A", img: "s5248f.png" },
-      { label: "VM Switch B", img: "s5248f.png" },
-      { label: "Storage Switch A", img: "s5248f.png" },
-      { label: "Storage Switch B", img: "s5248f.png" }
+      { label: "VM Switch A", img: "switchnew.png" },
+      { label: "VM Switch B", img: "switchnew.png" },
+      { label: "Storage Switch A", img: "switchnew.png" },
+      { label: "Storage Switch B", img: "switchnew.png" }
     ];
   } else {
     switches = [
-      { label: "Switch A", img: "s5248f.png" },
-      { label: "Switch B", img: "s5248f.png" }
+      { label: "Switch A", img: "switchnew.png" },
+      { label: "Switch B", img: "switchnew.png" }
     ];
   }
 
@@ -410,6 +428,8 @@ function updateSwitchRow() {
     const caption = document.createElement("div");
     caption.textContent = s.label;
     caption.className = "small mt-1";
+    caption.style.fontFamily = '"Caveat", cursive';
+    caption.style.fontWeight = '700';
 
     card.appendChild(img);
     card.appendChild(caption);

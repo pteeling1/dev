@@ -25,9 +25,16 @@ jobs:
           # Use GitHub API to monitor MicrosoftDocs/azure-stack-docs-pr (the actual source)
           SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
           
+          echo "Querying commits since: $SINCE_DATE"
+          
           # Query commits to the live branch (where docs are published from)
           RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs-pr/commits?sha=live&path=azure-local&since=${SINCE_DATE}&per_page=20")
+          
+          echo "DEBUG: Raw response (first 500 chars):"
+          echo "$RESPONSE" | head -c 500
+          echo ""
+          echo "---"
           
           # Check if response is valid JSON
           if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
@@ -38,19 +45,19 @@ jobs:
           
           # Check if we got any commits
           COUNT=$(echo "$RESPONSE" | jq 'length' 2>/dev/null || echo "0")
+          echo "Commit count: $COUNT"
           
           if [ "$COUNT" -eq 0 ] || [ "$COUNT" = "0" ]; then
             echo "No recent changes found (count: $COUNT)"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             echo "Found $COUNT recent commits"
-            echo "DEBUG: First commit structure:"
-            echo "$RESPONSE" | jq '.[0]' 2>/dev/null | head -20
             
-            # Try different jq filters
-            COMMITS=$(echo "$RESPONSE" | jq -r '.[] | "\(.sha[0:7])|\(.commit.message // .message // "No message")|\(.commit.author.date // .author.date // "")"' 2>/dev/null)
+            # Safely extract commits
+            COMMITS=$(echo "$RESPONSE" | jq -r '.[] | "\(.sha[0:7])|\(.commit.message // "")|\(.commit.author.date // "")"' 2>/dev/null)
             
             if [ ! -z "$COMMITS" ]; then
+              echo "Successfully parsed commits"
               echo "has_changes=true" >> $GITHUB_OUTPUT
               echo "commits<<EOF" >> $GITHUB_OUTPUT
               echo "$COMMITS" | head -5 >> $GITHUB_OUTPUT

@@ -19,19 +19,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Clone MicrosoftDocs/azure-docs
-        id: clone-docs
-        run: |
-          mkdir -p /tmp/azure-docs
-          cd /tmp/azure-docs
-          git clone --depth=100 https://github.com/MicrosoftDocs/azure-docs.git .
-
       - name: Get latest commits to Azure Local docs
         id: get-commits
         run: |
-          cd /tmp/azure-docs
-          # Get commits from the last 7 days to articles/azure-local/
-          COMMITS=$(git log --since="7 days ago" --pretty=format:"%h|%s|%ai" -- "articles/azure-local/" 2>/dev/null || echo "")
+          # Use GitHub API to get commits to articles/azure-local/ without cloning the entire repo
+          SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+          COMMITS=$(curl -s "https://api.github.com/repos/MicrosoftDocs/azure-docs/commits?path=articles%2Fazure-local&since=${SINCE_DATE}&per_page=10" | jq -r '.[] | "\(.sha | .[0:7])|\(.commit.message)|\(.commit.author.date)"')
+          
+          if [ -z "$COMMITS" ]; then
+            echo "No recent changes found"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "commits<<EOF" >> $GITHUB_OUTPUT
+            echo "$COMMITS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
           
           if [ -z "$COMMITS" ]; then
             echo "No recent changes found"
@@ -47,21 +50,29 @@ jobs:
         if: steps.get-commits.outputs.has_changes == 'true'
         id: changed-files
         run: |
-          cd /tmp/azure-docs
-          FILES=$(git log --name-only --pretty=format: --since="7 days ago" -- "articles/azure-local/" | grep -v '^$' | sort -u)
+          # Get list of changed files from the API
+          SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+          FILES=$(curl -s "https://api.github.com/repos/MicrosoftDocs/azure-docs/commits?path=articles%2Fazure-local&since=${SINCE_DATE}&per_page=10" | jq -r '.[].files[]?.filename' | sort -u)
+          
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          # Also capture file contents for Copilot context
+          # Fetch content for each changed file from GitHub API
           echo "file_contents<<EOF" >> $GITHUB_OUTPUT
-          for file in $FILES; do
-            if [ -f "$file" ]; then
+          while IFS= read -r file; do
+            if [ ! -z "$file" ]; then
               echo "--- File: $file ---" >> $GITHUB_OUTPUT
-              head -n 200 "$file" >> $GITHUB_OUTPUT
+              # Get raw file content from main branch
+              CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/$file" 2>/dev/null)
+              if [ ! -z "$CONTENT" ]; then
+                # Limit to first 1500 characters to stay within API limits
+                echo "$CONTENT" | head -c 1500 >> $GITHUB_OUTPUT
+                echo "..." >> $GITHUB_OUTPUT
+              fi
               echo "" >> $GITHUB_OUTPUT
             fi
-          done
+          done <<< "$FILES"
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate blog post with Copilot

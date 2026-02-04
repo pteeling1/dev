@@ -113,8 +113,12 @@ jobs:
           })));
           EOF
           
-          node /tmp/gen-blog.js > /tmp/blog.json
-          echo "blog_post=$(cat /tmp/blog.json)" >> $GITHUB_OUTPUT
+          node /tmp/gen-blog.js > /tmp/blog.json 2>/dev/null
+          if [ -f /tmp/blog.json ] && [ -s /tmp/blog.json ]; then
+            echo "blog_post<<EOFBLOG" >> $GITHUB_OUTPUT
+            cat /tmp/blog.json >> $GITHUB_OUTPUT
+            echo "EOFBLOG" >> $GITHUB_OUTPUT
+          fi
         env:
           COMMITS_DATA: ${{ steps.fetch-commits.outputs.commits }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

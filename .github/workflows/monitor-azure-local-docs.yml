@@ -559,9 +559,15 @@ Write as HTML paragraphs only (use <p class="article-text"> tags). Be specific, 
               return blogContent;
             } catch (error) {
               console.error('❌ Error calling GitHub Models:', error.message);
-              // Fallback if API fails
-              const fallback = `<p class="article-text">Azure Local documentation has been updated with important infrastructure changes. Key areas updated: ${changes.split('\n- ').filter(s => s).slice(0, 2).join(', ')}. Review the updated pages to ensure your deployments remain current with latest requirements.</p>`;
-              console.log('⚠️ Using fallback content due to API error');
+              // Enhanced fallback: create a better blog from extracted content if Claude fails
+              const specificChanges = changes
+                .split('\n- ')
+                .filter(s => s && s.length > 3)
+                .slice(0, 2)
+                .join(', ');
+              
+              const fallback = `<p class="article-text">Azure Local infrastructure documentation has been updated with important operational changes. Updates include: ${specificChanges}. These changes impact deployment requirements and operator responsibilities—review the affected documentation pages to ensure your environments remain current.</p>`;
+              console.log('⚠️ Using enhanced fallback content due to API error');
               return fallback;
             }
           }

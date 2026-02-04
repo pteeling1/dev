@@ -22,14 +22,14 @@ jobs:
       - name: Get latest commits to Azure Local docs
         id: get-commits
         run: |
-          # Use GitHub API to monitor MicrosoftDocs/azure-stack-docs-pr (the actual source)
+          # Use GitHub API to monitor MicrosoftDocs/azure-stack-docs (the correct public repository)
           SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
           
-          echo "Querying commits since: $SINCE_DATE"
+          echo "Querying MicrosoftDocs/azure-stack-docs since: $SINCE_DATE"
           
-          # Try querying without path filter first to verify the repo works
+          # Query commits to the main branch in the azure-local/ directory
           RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs-pr/commits?sha=live&since=${SINCE_DATE}&per_page=20")
+            "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs/commits?sha=main&since=${SINCE_DATE}&per_page=20")
           
           echo "DEBUG: Raw response (first 500 chars):"
           echo "$RESPONSE" | head -c 500
@@ -94,7 +94,7 @@ jobs:
           SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
           
           RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs-pr/commits?sha=live&path=azure-local&since=${SINCE_DATE}&per_page=20")
+            "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs/commits?sha=main&since=${SINCE_DATE}&per_page=20")
           
           FILES=$(echo "$RESPONSE" | jq -r '.[].files[]? | select(.status != "deleted") | .filename' | sort -u)
           
@@ -107,8 +107,8 @@ jobs:
           echo "$FILES" | head -5 | while IFS= read -r file; do
             if [ ! -z "$file" ]; then
               echo "--- File: $file ---" >> $GITHUB_OUTPUT
-              # Fetch from the live branch of azure-stack-docs-pr
-              CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-stack-docs-pr/live/$file" 2>/dev/null)
+              # Fetch from the main branch of azure-stack-docs
+              CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-stack-docs/main/$file" 2>/dev/null)
               if [ ! -z "$CONTENT" ]; then
                 # Limit to first 2000 characters
                 echo "$CONTENT" | head -c 2000 >> $GITHUB_OUTPUT

@@ -476,7 +476,7 @@ jobs:
               // Convert file path to Learn URL structure
               // e.g., azure-local/upgrade/install-solution.md -> /azure/azure-local/upgrade/install-solution
               const filePath = firstFile.name.replace(/\.md$/, '');
-              learnUrl = `https://learn.microsoft.com/en-us/${filePath}`;
+              learnUrl = `https://learn.microsoft.com/en-us/azure/${filePath}`;
             }
             
             const blogPost = {

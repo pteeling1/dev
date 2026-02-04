@@ -1,6 +1,15 @@
 {
   "auto_posts": [
     {
+      "id": "auto-2026-02-04-leup6a791",
+      "title": "Azure Local Documentation Update — February 4",
+      "subtitle": "Azure Local documentation improvements",
+      "date": "2026-02-04",
+      "content": "<p class=\"article-text\">The Azure Local documentation has been updated with important changes affecting deployment, installation, and operational procedures.</p>\n    \n    <p class=\"article-text\"><strong>📋 What Changed:</strong></p>\n    <ul class=\"article-list\">\n    <li>✓ Documentation updated with improvements</li>\n    </ul>\n    \n    <p class=\"article-text\"><strong>📂 Affected Documentation Files:</strong></p>\n    <ul class=\"article-list\">\n    <li><a href=\"https://github.com/MicrosoftDocs/azure-stack-docs/blob/94a2a02/azure-local/upgrade/install-solution-upgrade.md\" target=\"_blank\">install-solution-upgrade.md</a> <span style=\"color: #6b7280; font-size: 13px;\">(modified: +2/-2)</span></li>\n    </ul>\n    \n    <p class=\"article-text\"><strong>📊 Change Summary:</strong></p>\n    <p class=\"article-text\">\n    This update spans <strong>1 file(s)</strong> with <strong>+2 total additions</strong> and <strong>-2 deletions</strong>. \n    The updated file covers: .\n    </p>\n    \n    <p class=\"article-text\"><strong>📖 Review Full Changes:</strong></p>\n    <ul class=\"article-list\">\n    <li><a href=\"https://github.com/MicrosoftDocs/azure-stack-docs/commit/94a2a02\" target=\"_blank\">View commit on GitHub →</a> (see all changes in this update)</li>\n    <li><a href=\"https://learn.microsoft.com/en-us/azure/azure-local/\" target=\"_blank\">Azure Local documentation →</a> (learn more)</li>\n    </ul>",
+      "source": "Azure Local Docs Monitor",
+      "auto_generated": true
+    },
+    {
       "id": "auto-2026-02-04-tfr69nkn9",
       "title": "Azure Local Documentation Update — February 4",
       "subtitle": "Install solution upgrade on Azure Local • Prerequisites",

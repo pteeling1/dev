@@ -153,11 +153,9 @@ jobs:
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          echo "file_contents<<EOF" >> $GITHUB_OUTPUT
-          cat "$TEMP_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Save temp content path for next step instead of trying to pass through env var
+          echo "file_contents_path=$TEMP_CONTENT" >> $GITHUB_OUTPUT
           
-          rm -f "$TEMP_CONTENT"
           echo "File content fetch complete"
           exit 0
 
@@ -168,7 +166,18 @@ jobs:
           set +e
           
           COMMITS='${{ steps.get-commits.outputs.commits }}'
-          FILE_CONTENTS='${{ steps.changed-files.outputs.file_contents }}'
+          FILE_CONTENTS_PATH='${{ steps.changed-files.outputs.file_contents_path }}'
+          
+          # Read file contents from the file (avoids bash parsing issues with special chars)
+          FILE_CONTENTS=""
+          if [ -f "$FILE_CONTENTS_PATH" ]; then
+            FILE_CONTENTS=$(cat "$FILE_CONTENTS_PATH")
+          fi
+          
+          # Export it so node can access it
+          export FILE_CONTENTS
+          export COMMITS
+          export TEMP_POST_FILE=/tmp/blog-post.json
           
           # Use Node.js to generate blog post from commit data
           # Save to temp file so next step can read it
@@ -283,8 +292,6 @@ jobs:
           
           exit 0
         env:
-          COMMITS: ${{ steps.get-commits.outputs.commits }}
-          FILE_CONTENTS: ${{ steps.changed-files.outputs.file_contents }}
           TEMP_POST_FILE: ${{ runner.temp }}/blog-post.json
 
 

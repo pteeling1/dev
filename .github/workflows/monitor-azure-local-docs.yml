@@ -306,13 +306,9 @@ jobs:
           
           # Output the post for next step via environment
           if [ -f "$TEMP_POST" ]; then
-            POST_JSON=$(cat "$TEMP_POST")
-            echo "✅ Successfully read post from $TEMP_POST"
-            echo "post_json<<EOF" >> $GITHUB_OUTPUT
-            echo "$POST_JSON" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            echo "📤 Set post_json output ($(echo "$POST_JSON" | wc -c) bytes)"
-            rm -f "$TEMP_POST"
+            echo "✅ Successfully generated blog post at $TEMP_POST"
+            echo "post_json_path=$TEMP_POST" >> $GITHUB_OUTPUT
+            echo "📤 Set post_json_path output"
           else
             echo "❌ TEMP_POST file not found at: $TEMP_POST"
           fi
@@ -325,7 +321,7 @@ jobs:
 
 
       - name: Update blogs-data.json
-        if: steps.generate-post.outputs.post_json != ''
+        if: steps.generate-post.outputs.post_json_path != ''
         id: update-blogs
         run: |
           set +e
@@ -334,13 +330,18 @@ jobs:
           echo "═══════════════════════════════════════════════════════"
           echo "🔄 UPDATE BLOGS-DATA.JSON STEP"
           echo "═══════════════════════════════════════════════════════"
-          echo "post_json output exists: ${{ steps.generate-post.outputs.post_json != '' }}"
-          BLOG_POST_LEN=$(echo '${{ steps.generate-post.outputs.post_json }}' | wc -c)
-          echo "post_json length: $BLOG_POST_LEN bytes"
-          if [ "$BLOG_POST_LEN" -lt 10 ]; then
-            echo "❌ ERROR: post_json is too short!"
+          
+          POST_JSON_PATH='${{ steps.generate-post.outputs.post_json_path }}'
+          echo "post_json_path: $POST_JSON_PATH"
+          echo "file exists: $([ -f "$POST_JSON_PATH" ] && echo 'yes' || echo 'no')"
+          
+          if [ ! -f "$POST_JSON_PATH" ]; then
+            echo "❌ ERROR: post_json file not found at $POST_JSON_PATH"
             exit 0
           fi
+          
+          # Read the blog post JSON from file (avoids bash parsing issues)
+          BLOG_POST_JSON=$(cat "$POST_JSON_PATH")
           
           # Use node to process blog post and update JSON
           node << 'NODEJS_EOF'
@@ -413,7 +414,7 @@ jobs:
           BLOG_POST_JSON: ${{ steps.generate-post.outputs.post_json }}
 
       - name: Commit and push changes
-        if: steps.generate-post.outputs.post_json != ''
+        if: steps.generate-post.outputs.post_json_path != ''
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"

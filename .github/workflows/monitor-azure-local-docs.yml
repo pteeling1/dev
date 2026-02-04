@@ -5,6 +5,11 @@ on:
     # Run every Monday at 9:00 AM UTC
     - cron: '0 9 * * 1'
   workflow_dispatch: # Allow manual trigger
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/monitor-azure-local-docs.yml'
 
 jobs:
   monitor-and-generate:
@@ -516,42 +521,50 @@ jobs:
           }
           
           async function generateBlogWithClaude(postData) {
-            // Extract changes from the HTML content
-            const changes = postData.content
-              .match(/<li>(.*?)<\/li>/g)
-              ?.map(li => li.replace(/<\/?li>/g, '').replace(/\(removed\)\s*-?\s*/, ''))
+            // Extract changes from the HTML content - preserve original text
+            const changeElements = postData.content.match(/<li>(.*?)<\/li>/g) || [];
+            const changes = changeElements
+              .map(li => li.replace(/<\/?li>/g, '').trim())
               .filter(li => li.length > 5)
               .slice(0, 3)
-              .join('\n- ')
-              || 'Documentation updates';
+              .join('\n- ');
           
             const fileLinks = postData.content.match(/<a href="([^"]+)">([^<]+)<\/a>/g)
               ?.slice(0, 3)
               .map(a => {
-                const match = a.match(/>([^<]+)</);
-                return match ? match[1].trim() : '';
+                const match = a.match(/>([^<]+)</);  
+                return match ? match[1].trim().replace(/-/g, ' ') : '';
               })
               .filter(s => s)
               .join(', ')
               || 'Azure Local documentation';
           
-            const prompt = `You are a technical writer for Azure Local documentation. Write a SHORT, 2-3 sentence blog post about Azure documentation changes. Be concise and focus on practical impact for Azure Local operators.
+            const prompt = `You are a technical writer for Azure Local Infrastructure documentation. Write a concise, specific blog post (2-3 sentences max) about Azure documentation changes.
 
-Changes made:
-- ${changes}
+Focus on:
+- Specific technical requirements or changes
+- Practical impact for operators/administrators  
+- Why the change matters for deployments
 
-Updated pages: ${fileLinks}
+Updated documentation: ${fileLinks}
 
-Write as plain HTML paragraphs (use <p> tags). Do NOT include links or markdown - those will be added separately. Keep it technical but accessible. Do not include the title or subtitle - just the body content.`;
+Key changes detected:
+${changes}
+
+Write as HTML paragraphs only (use <p class="article-text"> tags). Be specific, technical, and actionable. Do NOT include external links or markdown - those are added separately. Target Azure Local administrators who deploy and maintain systems.`;
           
             try {
               console.log('Calling GitHub Models API with Claude Sonnet 4.5...');
               const blogContent = await callGitHubModels(prompt);
+              console.log('✅ Claude response received:');
+              console.log(blogContent);
               return blogContent;
             } catch (error) {
-              console.error('Error calling GitHub Models:', error.message);
+              console.error('❌ Error calling GitHub Models:', error.message);
               // Fallback if API fails
-              return `<p class="article-text">Azure Local documentation has been updated with important changes. Key areas updated: ${changes.split('- ').filter(s => s).slice(0, 2).join(', ')}. Review the updated pages for details.</p>`;
+              const fallback = `<p class="article-text">Azure Local documentation has been updated with important infrastructure changes. Key areas updated: ${changes.split('\n- ').filter(s => s).slice(0, 2).join(', ')}. Review the updated pages to ensure your deployments remain current with latest requirements.</p>`;
+              console.log('⚠️ Using fallback content due to API error');
+              return fallback;
             }
           }
           

@@ -295,10 +295,14 @@ jobs:
           # Output the post for next step via environment
           if [ -f "$TEMP_POST" ]; then
             POST_JSON=$(cat "$TEMP_POST")
+            echo "✅ Successfully read post from $TEMP_POST"
             echo "post_json<<EOF" >> $GITHUB_OUTPUT
             echo "$POST_JSON" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
+            echo "📤 Set post_json output ($(echo "$POST_JSON" | wc -c) bytes)"
             rm -f "$TEMP_POST"
+          else
+            echo "❌ TEMP_POST file not found at: $TEMP_POST"
           fi
           
           exit 0
@@ -313,8 +317,16 @@ jobs:
           set +e
           
           # Debug: show what we're working with
+          echo "═══════════════════════════════════════════════════════"
+          echo "🔄 UPDATE BLOGS-DATA.JSON STEP"
+          echo "═══════════════════════════════════════════════════════"
           echo "post_json output exists: ${{ steps.generate-post.outputs.post_json != '' }}"
-          echo "post_json length: $(echo '${{ steps.generate-post.outputs.post_json }}' | wc -c)"
+          BLOG_POST_LEN=$(echo '${{ steps.generate-post.outputs.post_json }}' | wc -c)
+          echo "post_json length: $BLOG_POST_LEN bytes"
+          if [ "$BLOG_POST_LEN" -lt 10 ]; then
+            echo "❌ ERROR: post_json is too short!"
+            exit 0
+          fi
           
           # Use node to process blog post and update JSON
           node << 'NODEJS_EOF'

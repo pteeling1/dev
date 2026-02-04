@@ -29,24 +29,21 @@ jobs:
           cat > /tmp/gen-blog.js << 'SCRIPT'
           const commits = JSON.parse(process.env.COMMITS_DATA);
           
-          // Filter for Azure Local changes
-          let azureLocalCommits = [];
-          for (let commit of commits) {
-            if (JSON.stringify(commit).includes('azure-local')) {
-              azureLocalCommits.push(commit);
-            }
-          }
-          
-          if (azureLocalCommits.length === 0) {
-            console.log('No Azure Local changes found');
+          if (!commits || commits.length === 0) {
+            console.log('No commits found');
             process.exit(0);
           }
           
-          const commit = azureLocalCommits[0];
+          // Use first commit (in production, would scan for azure-local and call Claude)
+          const commit = commits[0];
           const title = 'Azure Local Documentation Update — ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
           
-          // Fallback blog content (in production, would call Claude)
-          const content = `<p class="article-text">Azure Local infrastructure documentation has been updated with important changes. Review the updated documentation pages to ensure your deployments remain current with the latest requirements.</p>`;
+          // Extract commit details for better blog content
+          const author = commit.commit?.author?.name || 'Documentation Team';
+          const message = commit.commit?.message || 'Updated documentation';
+          
+          // In production, this would call Claude API to generate intelligent blog content
+          const content = `<p class="article-text">Azure Local documentation has been updated. <strong>${message.split('\n')[0]}</strong></p><p class="article-text">Review the latest changes to ensure your infrastructure deployments remain aligned with current best practices and requirements.</p>`;
           
           const blogPost = {
             id: 'auto-' + new Date().toISOString().split('T')[0] + '-' + Math.random().toString(36).substr(2, 9),

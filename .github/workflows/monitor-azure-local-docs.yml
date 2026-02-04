@@ -60,16 +60,6 @@ jobs:
               echo "has_changes=false" >> $GITHUB_OUTPUT
             fi
           fi
-          
-          if [ -z "$COMMITS" ]; then
-            echo "No recent changes found"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "commits<<EOF" >> $GITHUB_OUTPUT
-            echo "$COMMITS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
 
       - name: Fetch changed files and content
         if: steps.get-commits.outputs.has_changes == 'true'

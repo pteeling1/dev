@@ -22,6 +22,8 @@ jobs:
       - name: Get latest commits to Azure Local docs
         id: get-commits
         run: |
+          set +e  # Disable exit-on-error for this step
+          
           # Use GitHub API to monitor MicrosoftDocs/azure-stack-docs (the correct public repository)
           SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
           
@@ -36,10 +38,18 @@ jobs:
           BODY=$(echo "$RESPONSE" | sed '$d')
           
           echo "HTTP Status: $HTTP_CODE"
+          echo "Body length: $(echo "$BODY" | wc -c) bytes"
           
           if [ "$HTTP_CODE" != "200" ]; then
             echo "API request failed with status $HTTP_CODE"
             echo "Response: $BODY"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Try to validate JSON first
+          if ! echo "$BODY" | jq empty 2>/dev/null; then
+            echo "Response is not valid JSON"
             echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -52,23 +62,25 @@ jobs:
             exit 0
           fi
           
-          # Check if response is a valid array using a safer method
+          # Check if response is a valid array
           IS_ARRAY=$(echo "$BODY" | jq 'type' 2>/dev/null)
+          echo "Response type: $IS_ARRAY"
+          
           if [ "$IS_ARRAY" != '"array"' ]; then
             echo "API response is not an array (type: $IS_ARRAY)"
             echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
-          # Count commits safely
-          COUNT=$(echo "$BODY" | jq 'length' 2>/dev/null || echo 0)
+          # Count commits
+          COUNT=$(echo "$BODY" | jq 'length' 2>/dev/null)
           echo "Found $COUNT recent commits"
           
           if [ "$COUNT" -eq 0 ] || [ -z "$COUNT" ]; then
             echo "No recent changes found"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
-            # Extract commits safely
+            # Extract commits
             COMMITS=$(echo "$BODY" | jq -r '.[] | "\(.sha[0:7])|\(.commit.message // "")|\(.commit.author.date // "")"' 2>/dev/null | head -5)
             
             if [ ! -z "$COMMITS" ]; then
@@ -82,6 +94,8 @@ jobs:
               echo "has_changes=false" >> $GITHUB_OUTPUT
             fi
           fi
+          
+          exit 0
 
       - name: Fetch changed files and content
         if: steps.get-commits.outputs.has_changes == 'true'

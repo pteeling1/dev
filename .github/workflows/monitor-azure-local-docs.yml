@@ -452,7 +452,6 @@ jobs:
             }
             
             const heuristicAnalysis = analyzeChangesHeuristically();
-
             
             // Generate blog post with SPECIFIC actual changes
             const latestSha = commitMessages[0].sha;
@@ -470,6 +469,16 @@ jobs:
               })
               .join('\n');
             
+            // Build Microsoft Learn URL from the first modified file
+            let learnUrl = 'https://learn.microsoft.com/en-us/azure/azure-local/';
+            if (files.length > 0) {
+              const firstFile = files[0];
+              // Convert file path to Learn URL structure
+              // e.g., azure-local/upgrade/install-solution.md -> /azure/azure-local/upgrade/install-solution
+              const filePath = firstFile.name.replace(/\.md$/, '');
+              learnUrl = `https://learn.microsoft.com/en-us/${filePath}`;
+            }
+            
             const blogPost = {
               title: 'Azure Local Documentation Update — ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' }),
               subtitle: subtitle,
@@ -478,7 +487,7 @@ jobs:
               <p class="article-text">${heuristicAnalysis[0]}</p>
               ` : '<p class="article-text">The Azure Local documentation has been updated. Check the repository for details.</p>'}
               
-              <p class="article-text"><a href="https://learn.microsoft.com/en-us/azure/azure-local/" target="_blank"><strong>📖 Read on Microsoft Learn →</strong></a></p>
+              <p class="article-text"><a href="${learnUrl}" target="_blank"><strong>📖 Read on Microsoft Learn →</strong></a></p>
               <p class="article-text" style="font-size: 13px; color: #6b7280;">(<a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/${latestSha}" target="_blank">View changes on GitHub</a>)</p>
               `.trim()
             };

@@ -8,8 +8,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - '.github/workflows/monitor-azure-local-docs.yml'
 
 jobs:
   monitor-and-generate:

@@ -297,8 +297,13 @@ jobs:
 
       - name: Update blogs-data.json
         if: steps.generate-post.outputs.post_json != ''
+        id: update-blogs
         run: |
           set +e
+          
+          # Debug: show what we're working with
+          echo "post_json output exists: ${{ steps.generate-post.outputs.post_json != '' }}"
+          echo "post_json length: $(echo '${{ steps.generate-post.outputs.post_json }}' | wc -c)"
           
           # Use node to process blog post and update JSON
           node << 'NODEJS_EOF'
@@ -357,6 +362,8 @@ jobs:
             console.log('Subtitle:', newPost.subtitle);
             console.log('Total auto posts:', blogsData.auto_posts.length);
             console.log('');
+            console.log('File contents (first 500 chars):');
+            console.log(JSON.stringify(blogsData, null, 2).substring(0, 500));
             
           } catch (error) {
             console.error('Error updating blogs-data.json:', error);
@@ -375,4 +382,4 @@ jobs:
           git config --local user.name "GitHub Action"
           git add blogs-data.json
           git commit -m "Auto-generated blog post: Azure Local docs update" || echo "No changes to commit"
-          git push
+          git push origin main

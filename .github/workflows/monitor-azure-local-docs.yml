@@ -186,6 +186,7 @@ jobs:
           node << 'NODEJS_EOF'
           const fs = require('fs');
           
+          (async () => {
           try {
             // Read commits and diffs from files
             const commitsFile = process.env.COMMITS_FILE;
@@ -396,6 +397,81 @@ jobs:
             changesSummary.forEach(c => console.log(`  ${c}`));
             console.log('');
             
+            // Call Claude API for business/technical analysis of changes
+            async function getClaudeAnalysis() {
+              try {
+                const apiKey = process.env.CLAUDE_API_KEY;
+                if (!apiKey) {
+                  console.log('⚠️  CLAUDE_API_KEY not set, skipping analysis');
+                  return null;
+                }
+                
+                // Build context for Claude
+                const filesList = files.slice(0, 5).map(f => `${f.name} (${f.status}: +${f.additions}/-${f.deletions})`).join('\n');
+                const topicsList = keyTopics.join(', ');
+                const patchSummary = allPatches.substring(0, 2000); // First 2000 chars of patches
+                
+                const analysisPrompt = `You are a cloud infrastructure analyst. Analyze this Azure Local documentation change and provide business/technical insights.
+
+Files changed:
+${filesList}
+
+Topics covered:
+${topicsList}
+
+Change content (excerpt):
+${patchSummary}
+
+Provide 2-3 sentences explaining:
+1. What this change signals about Microsoft's direction
+2. Operational or architectural implications
+3. Why this matters for Azure Local adoption
+
+Be specific and insightful, not generic.`;
+
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                  },
+                  body: JSON.stringify({
+                    model: 'claude-3-5-sonnet-20241022',
+                    max_tokens: 300,
+                    messages: [{
+                      role: 'user',
+                      content: analysisPrompt
+                    }]
+                  })
+                });
+                
+                if (!response.ok) {
+                  console.log(`⚠️  Claude API error: ${response.status}`);
+                  return null;
+                }
+                
+                const data = await response.json();
+                const analysis = data.content[0]?.text || null;
+                
+                if (analysis) {
+                  console.log('═══════════════════════════════════════════════════════');
+                  console.log('🤖 CLAUDE ANALYSIS');
+                  console.log('═══════════════════════════════════════════════════════');
+                  console.log(analysis);
+                  console.log('');
+                }
+                
+                return analysis;
+              } catch (error) {
+                console.log(`⚠️  Claude analysis failed: ${error.message}`);
+                return null;
+              }
+            }
+            
+            // Get Claude analysis (await it)
+            const claudeAnalysis = await getClaudeAnalysis();
+            
             // Generate blog post with SPECIFIC actual changes
             const latestSha = commitMessages[0].sha;
             const subtitle = keyTopics.length > 0 
@@ -417,6 +493,11 @@ jobs:
               subtitle: subtitle,
               content: `
               <p class="article-text">The Azure Local documentation has been updated with important changes affecting deployment, installation, and operational procedures.</p>
+              
+              ${claudeAnalysis ? `
+              <p class="article-text"><strong>🔍 What This Means:</strong></p>
+              <p class="article-text">${claudeAnalysis}</p>
+              ` : ''}
               
               <p class="article-text"><strong>📋 What Changed:</strong></p>
               <ul class="article-list">
@@ -461,6 +542,7 @@ jobs:
             console.error('Error generating blog post:', error);
             process.exit(1);
           }
+          })();
           NODEJS_EOF
           
           # Output the post for next step via environment

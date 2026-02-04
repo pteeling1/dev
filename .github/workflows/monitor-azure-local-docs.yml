@@ -183,6 +183,9 @@ jobs:
           # Save to temp file so next step can read it
           TEMP_POST="${RUNNER_TEMP}/blog-post-temp.json"
           
+          # Export variables so Node subshell can access them
+          export COMMITS_FILE DIFFS_PATH TEMP_POST
+          
           node << 'NODEJS_EOF'
           const fs = require('fs');
           

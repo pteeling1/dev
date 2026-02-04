@@ -1,7 +1,7 @@
 name: Generate Blog from Azure Docs Changes
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
   schedule:
     - cron: '0 9 * * 1'
 

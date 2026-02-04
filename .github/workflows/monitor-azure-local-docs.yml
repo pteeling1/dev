@@ -113,7 +113,15 @@ jobs:
           FILES=$(echo "$RESPONSE" | jq -r '.[].files[]? | select(.status != "deleted") | .filename' 2>/dev/null | sort -u)
           FILE_COUNT=$(echo "$FILES" | grep -c '^' || echo 0)
           
-          echo "Found $FILE_COUNT changed files"
+          echo "═══════════════════════════════════════════════════════"
+          echo "📁 FETCHED FILES FROM MICROSOFT DOCS"
+          echo "═══════════════════════════════════════════════════════"
+          echo "Found $FILE_COUNT changed files:"
+          echo "$FILES" | head -5 | nl
+          if [ $FILE_COUNT -gt 5 ]; then
+            echo "... and $((FILE_COUNT - 5)) more files"
+          fi
+          echo ""
           
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
@@ -123,10 +131,11 @@ jobs:
           TEMP_CONTENT=$(mktemp)
           echo "--- Fetching file contents ---" >> "$TEMP_CONTENT"
           
+          echo "📥 FETCHING FILE CONTENTS (first 5 files, 2000 chars each):"
           # Read files without pipe to avoid subshell
           while IFS= read -r file; do
             if [ ! -z "$file" ]; then
-              echo "Fetching: $file" 
+              echo "  ✓ $file" 
               echo "--- File: $file ---" >> "$TEMP_CONTENT"
               CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-stack-docs/main/$file" 2>/dev/null)
               if [ ! -z "$CONTENT" ]; then
@@ -179,6 +188,24 @@ jobs:
               process.exit(0);
             }
             
+            console.log('═══════════════════════════════════════════════════════');
+            console.log('📝 COMMITS BEING PROCESSED');
+            console.log('═══════════════════════════════════════════════════════');
+            console.log(`Total commits: ${commitMessages.length}`);
+            commitMessages.slice(0, 10).forEach((c, i) => {
+              console.log(`  ${i+1}. [${c.sha}] ${c.message.substring(0, 70)}`);
+            });
+            if (commitMessages.length > 10) {
+              console.log(`  ... and ${commitMessages.length - 10} more`);
+            }
+            console.log('');
+            
+            console.log('═══════════════════════════════════════════════════════');
+            console.log('🔍 FILE CONTENTS BEING ANALYZED');
+            console.log('═══════════════════════════════════════════════════════');
+            const filePreview = fileContents.substring(0, 300);
+            console.log(`Content preview (first 300 chars):\n${filePreview}...\n`);
+            
             // Extract key topics from commit messages
             const topics = new Set();
             commitMessages.forEach(c => {
@@ -190,6 +217,10 @@ jobs:
               if (msg.includes('fix') || msg.includes('bug')) topics.add('bug fix');
               if (msg.includes('performance') || msg.includes('optimize')) topics.add('performance');
             });
+            
+            console.log('📊 EXTRACTED TOPICS:');
+            Array.from(topics).forEach(t => console.log(`  • ${t}`));
+            console.log('');
             
             // Generate blog post
             const date = new Date().toISOString().split('T')[0];

@@ -484,12 +484,13 @@ jobs:
               });
               
               const options = {
-                hostname: 'models.githubusercontentcdn.com',
-                path: '/v1/chat/completions',
+                hostname: 'api.github.com',
+                path: '/models/chat/completions',
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json',
+                  'User-Agent': 'GitHub-Blog-Generator',
                   'Content-Length': Buffer.byteLength(requestData)
                 }
               };
@@ -500,13 +501,16 @@ jobs:
                 res.on('end', () => {
                   try {
                     const response = JSON.parse(data);
-                    if (response.choices && response.choices[0]) {
+                    if (response.error) {
+                      console.error('API Error:', response.error);
+                      reject(new Error('GitHub Models API error: ' + JSON.stringify(response.error)));
+                    } else if (response.choices && response.choices[0]) {
                       resolve(response.choices[0].message.content);
                     } else {
                       reject(new Error('Invalid response from GitHub Models: ' + data));
                     }
                   } catch (e) {
-                    reject(new Error('Failed to parse response: ' + e.message));
+                    reject(new Error('Failed to parse response: ' + e.message + ' | data: ' + data));
                   }
                 });
               });

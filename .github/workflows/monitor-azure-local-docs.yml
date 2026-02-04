@@ -29,7 +29,17 @@ jobs:
             FILTERED=$(echo "$RESPONSE" | jq '[.[] | select(.commit.message | test("(deploy|upgrade|update|security|config)", "i"))] | .[0:1]' -c)
           fi
           
-          echo "commits=$(echo "$FILTERED" | jq -c '.' )" >> $GITHUB_OUTPUT
+          # For the first matching commit, fetch full details including diff
+          if [ "$(echo "$FILTERED" | jq 'length')" -gt "0" ]; then
+            SHA=$(echo "$FILTERED" | jq -r '.[0].sha')
+            FULL_COMMIT=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs/commits/$SHA")
+            
+            # Add the full commit details to our output
+            echo "commits=$(echo "$FULL_COMMIT" | jq -c '{sha: .sha, message: .commit.message, author: .commit.author.name, files: .files | map({filename, additions, deletions, patch})}')" >> $GITHUB_OUTPUT
+          else
+            echo "commits={}" >> $GITHUB_OUTPUT
+          fi
       
       - name: Generate blog with Claude
         id: generate-blog
@@ -80,8 +90,9 @@ jobs:
           }
           
           async function run() {
-            const commits = JSON.parse(process.env.COMMITS_DATA || '[]');
-            if (!commits || !commits.length) {
+            const commitData = JSON.parse(process.env.COMMITS_DATA || '{}');
+            
+            if (!commitData.sha) {
               console.log(JSON.stringify({
                 id: 'auto-' + new Date().toISOString().slice(0,10) + '-none',
                 title: 'Azure Local Docs Monitor', subtitle: 'No recent changes',
@@ -92,26 +103,48 @@ jobs:
               return;
             }
             
-            const c = commits[0];
-            const msg = (c.commit.message || '').split('\n')[0];
             const title = 'Azure Local Update — ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
             
             try {
-              const p = 'Write 80-120 word technical blog for ops teams about: ' + msg + '\nBe specific, actionable, and mention impact.';
-              const claude = await callClaudeAPI(p);
+              // Build rich context for Claude
+              const files = commitData.files || [];
+              const filesInfo = files.map(f => `- ${f.filename}: +${f.additions} -${f.deletions}`).join('\n');
+              const diffs = files.slice(0, 3).map(f => f.patch || '').filter(p => p).join('\n\n');
+              
+              const prompt = `You are an Azure Local infrastructure expert writing for ops teams. 
+              
+Analyze this documentation change and write a 80-120 word technical blog post:
+
+**Commit Message:** ${commitData.message}
+
+**Files Changed:**
+${filesInfo}
+
+**Diff Preview:**
+${diffs.slice(0, 1500)}
+
+**Instructions:**
+1. Explain what changed and why it matters for operations teams
+2. Be specific - reference the actual changes (added fields, removed steps, etc.)
+3. Mention any operational impact or required actions
+4. Keep it technical but accessible`;
+              
+              const claude = await callClaudeAPI(prompt);
               const content = claude.split('\n').filter(l => l.trim()).map(l => '<p class="article-text">' + l + '</p>').join('');
               console.log(JSON.stringify({
                 id: 'auto-' + new Date().toISOString().slice(0,10) + '-' + Math.random().toString(36).slice(2,11),
                 title: title, subtitle: 'Azure Local docs update', date: new Date().toISOString().slice(0,10),
-                content: content + '<p class="article-text"><a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/' + c.sha.slice(0,7) + '">View →</a></p>',
+                content: content + '<p class="article-text"><a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/' + commitData.sha.slice(0,7) + '">View full commit →</a></p>',
                 source: 'Azure Local Docs Monitor', auto_generated: true, claude_generated: true
               }));
             } catch (e) {
-              const content = '<p class="article-text"><strong>' + msg + '</strong></p><p class="article-text">Documentation updated. Review changes for latest requirements.</p>';
+              const files = commitData.files || [];
+              const filesInfo = files.map(f => `${f.filename} (${f.additions} additions, ${f.deletions} deletions)`).join('; ');
+              const content = '<p class="article-text"><strong>' + commitData.message.split('\n')[0] + '</strong></p><p class="article-text">Files modified: ' + filesInfo + '</p><p class="article-text">Review the documentation changes to understand the latest Azure Local deployment and configuration updates.</p>';
               console.log(JSON.stringify({
                 id: 'auto-' + new Date().toISOString().slice(0,10) + '-' + Math.random().toString(36).slice(2,11),
                 title: title, subtitle: 'Azure Local docs update', date: new Date().toISOString().slice(0,10),
-                content: content + '<p class="article-text"><a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/' + c.sha.slice(0,7) + '">View →</a></p>',
+                content: content + '<p class="article-text"><a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/' + commitData.sha.slice(0,7) + '">View full commit →</a></p>',
                 source: 'Azure Local Docs Monitor', auto_generated: true
               }));
             }

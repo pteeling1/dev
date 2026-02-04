@@ -346,20 +346,6 @@ jobs:
             const allPatches = diffs.split('PATCH_START').slice(1).map(p => p.split('PATCH_END')[0]).join('\n');
             const changesSummary = extractChangesSummary(allPatches);
             
-            // Parse JSON file links from diffs (added at end)
-            let jsonMatch = diffs.match(/\{"filename".*?\}\s*$/ms);
-            if (jsonMatch) {
-              try {
-                const jsonStr = jsonMatch[0];
-                const linkObj = JSON.parse(jsonStr);
-                if (linkObj.filename && linkObj.url) {
-                  fileLinks.push(linkObj);
-                }
-              } catch (e) {
-                // Continue if JSON parsing fails
-              }
-            }
-            
             // Remove duplicates from topics
             keyTopics = [...new Set(keyTopics)].filter(t => t && t.length > 2).slice(0, 5);
             

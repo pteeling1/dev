@@ -1,6 +1,15 @@
 {
   "auto_posts": [
     {
+      "id": "auto-2026-02-04-tfr69nkn9",
+      "title": "Azure Local Documentation Update — February 4",
+      "subtitle": "Install solution upgrade on Azure Local • Prerequisites",
+      "date": "2026-02-04",
+      "content": "<p class=\"article-text\">The Azure Local documentation has been updated with important new content and improvements. The following topics have been added or modified:</p>\n    \n    <p class=\"article-text\"><strong>📚 Updated Topics:</strong></p>\n    <ul class=\"article-list\">\n    <li>Install solution upgrade on Azure Local</li>\n<li>Prerequisites</li>\n    </ul>\n    \n    <p class=\"article-text\"><strong>📋 What's New:</strong></p>\n    <p class=\"article-text\">\n    These updates reflect the latest best practices and feature enhancements for Azure Local deployments. Topics covered include installation procedures, configuration guidance, operational best practices, and troubleshooting support.\n    </p>\n    \n    <p class=\"article-text\"><strong>🔗 Learn More:</strong></p>\n    <p class=\"article-text\">\n    For detailed information and complete documentation, visit the <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/\" target=\"_blank\">official Azure Local documentation</a>.\n    </p>",
+      "source": "Azure Local Docs Monitor",
+      "auto_generated": true
+    },
+    {
       "id": "auto-2026-02-04-0aq8zt4t5",
       "title": "Azure Local Documentation Update — February 4",
       "subtitle": "Install solution upgrade.md (commit: 94a2a02)     • --- File: azure-local/upgrade/install-solution-upgrade.md (commit: 94a2a02) --- • title: Install solution upgrade on Azure Local",

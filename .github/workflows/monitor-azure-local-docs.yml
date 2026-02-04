@@ -153,8 +153,12 @@ jobs:
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          # Save temp content path for next step instead of trying to pass through env var
-          echo "file_contents_path=$TEMP_CONTENT" >> $GITHUB_OUTPUT
+          # Save temp content to workspace (not /tmp which gets deleted between steps)
+          # Use the runner temp directory which persists for the job
+          CONTENT_FILE="${RUNNER_TEMP}/file-contents.txt"
+          cp "$TEMP_CONTENT" "$CONTENT_FILE"
+          echo "file_contents_path=$CONTENT_FILE" >> $GITHUB_OUTPUT
+          rm -f "$TEMP_CONTENT"
           
           echo "File content fetch complete"
           exit 0
@@ -168,10 +172,17 @@ jobs:
           COMMITS='${{ steps.get-commits.outputs.commits }}'
           FILE_CONTENTS_PATH='${{ steps.changed-files.outputs.file_contents_path }}'
           
+          # Debug output
+          echo "DEBUG: Checking for file contents at: $FILE_CONTENTS_PATH"
+          echo "DEBUG: File exists: $([ -f "$FILE_CONTENTS_PATH" ] && echo 'yes' || echo 'no')"
+          
           # Read file contents from the file (avoids bash parsing issues with special chars)
           FILE_CONTENTS=""
           if [ -f "$FILE_CONTENTS_PATH" ]; then
             FILE_CONTENTS=$(cat "$FILE_CONTENTS_PATH")
+            echo "DEBUG: Read $(echo "$FILE_CONTENTS" | wc -c) bytes from file"
+          else
+            echo "WARNING: File contents file not found at $FILE_CONTENTS_PATH"
           fi
           
           # Export it so node can access it

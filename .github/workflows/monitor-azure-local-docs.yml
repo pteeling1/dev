@@ -103,49 +103,55 @@ jobs:
         run: |
           set +e  # Disable exit-on-error
           
-          # Get list of files that changed in the last 7 days
-          SINCE_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+          # Get list of files from the commits we already found
+          COMMITS_DATA='${{ steps.get-commits.outputs.commits }}'
           
-          RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs/commits?sha=main&since=${SINCE_DATE}&per_page=20")
-          
-          # Get all changed files
-          FILES=$(echo "$RESPONSE" | jq -r '.[].files[]? | select(.status != "deleted") | .filename' 2>/dev/null | sort -u)
-          FILE_COUNT=$(echo "$FILES" | grep -c '^' || echo 0)
+          # Extract just the first 3 SHAs from commits to get file details
+          SHAS=$(echo "$COMMITS_DATA" | cut -d'|' -f1 | head -3)
           
           echo "═══════════════════════════════════════════════════════"
-          echo "📁 FETCHED FILES FROM MICROSOFT DOCS"
+          echo "📁 FETCHING FILE DETAILS FOR COMMITS"
           echo "═══════════════════════════════════════════════════════"
-          echo "Found $FILE_COUNT changed files:"
-          echo "$FILES" | head -5 | nl
-          if [ $FILE_COUNT -gt 5 ]; then
-            echo "... and $((FILE_COUNT - 5)) more files"
-          fi
+          
+          TEMP_CONTENT=$(mktemp)
+          echo "--- Fetching file contents ---" >> "$TEMP_CONTENT"
+          
+          FILE_COUNT=0
+          while IFS= read -r sha; do
+            if [ ! -z "$sha" ]; then
+              echo "Getting files for commit $sha"
+              # Get commit details which includes files
+              COMMIT_DETAIL=$(curl -s "https://api.github.com/repos/MicrosoftDocs/azure-stack-docs/commits/$sha" \
+                -H "Accept: application/vnd.github.v3+json")
+              
+              # Extract files from this commit
+              FILES=$(echo "$COMMIT_DETAIL" | jq -r '.files[]? | select(.status != "deleted") | .filename' 2>/dev/null)
+              
+              # Fetch content for each file
+              while IFS= read -r file; do
+                if [ ! -z "$file" ]; then
+                  FILE_COUNT=$((FILE_COUNT + 1))
+                  echo "  ✓ [$sha] $file"
+                  echo "--- File: $file (commit: $sha) ---" >> "$TEMP_CONTENT"
+                  
+                  CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-stack-docs/main/$file" 2>/dev/null)
+                  if [ ! -z "$CONTENT" ]; then
+                    echo "$CONTENT" | head -c 2000 >> "$TEMP_CONTENT"
+                  else
+                    echo "[Failed to fetch or empty]" >> "$TEMP_CONTENT"
+                  fi
+                  echo "" >> "$TEMP_CONTENT"
+                fi
+              done <<< "$FILES"
+            fi
+          done <<< "$SHAS"
+          
+          echo "Found $FILE_COUNT files in commits"
           echo ""
           
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
-          # Fetch content from first 5 files (using temp file to avoid subshell)
-          TEMP_CONTENT=$(mktemp)
-          echo "--- Fetching file contents ---" >> "$TEMP_CONTENT"
-          
-          echo "📥 FETCHING FILE CONTENTS (first 5 files, 2000 chars each):"
-          # Read files without pipe to avoid subshell
-          while IFS= read -r file; do
-            if [ ! -z "$file" ]; then
-              echo "  ✓ $file" 
-              echo "--- File: $file ---" >> "$TEMP_CONTENT"
-              CONTENT=$(curl -s "https://raw.githubusercontent.com/MicrosoftDocs/azure-stack-docs/main/$file" 2>/dev/null)
-              if [ ! -z "$CONTENT" ]; then
-                echo "$CONTENT" | head -c 2000 >> "$TEMP_CONTENT"
-              else
-                echo "[Failed to fetch or empty]" >> "$TEMP_CONTENT"
-              fi
-              echo "" >> "$TEMP_CONTENT"
-            fi
-          done <<< "$(echo "$FILES" | head -5)"
           
           echo "file_contents<<EOF" >> $GITHUB_OUTPUT
           cat "$TEMP_CONTENT" >> $GITHUB_OUTPUT

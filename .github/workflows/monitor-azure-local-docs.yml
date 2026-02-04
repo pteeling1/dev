@@ -446,7 +446,7 @@ jobs:
           DIFFS_PATH: ${{ steps.changed-files.outputs.diffs_path }}
           TEMP_POST: ${{ runner.temp }}/blog-post-temp.json
 
-      - name: Generate Blog Content with Copilot
+      - name: Generate Blog Content with GitHub Models Claude
         if: steps.generate-post.outputs.post_json_path != ''
         id: copilot-generate
         run: |
@@ -456,49 +456,23 @@ jobs:
           FINAL_POST="${RUNNER_TEMP}/blog-post-final.json"
           
           echo "📖 Reading extracted changes from: $POST_FILE"
+          echo "🤖 Generating blog with Claude (GitHub Models)..."
           
-          # Create Node.js script to call GitHub Models (Claude via Copilot)
+          # Create Node.js script to call GitHub Models API
           cat > /tmp/generate-blog.js << 'BLOG_SCRIPT'
           const fs = require('fs');
           const https = require('https');
           
-          async function generateBlogWithCopilot(postData) {
-            // Build prompt from extracted changes
-            const changes = postData.content
-              .match(/<li>(.*?)<\/li>/g)
-              ?.map(li => li.replace(/<\/?li>/g, ''))
-              .slice(0, 3)
-              .join('\n- ')
-              || 'Documentation updates';
-          
-            const fileLinks = postData.content.match(/<a href="([^"]+)">([^<]+)<\/a>/g)
-              ?.slice(0, 3)
-              .map(a => {
-                const match = a.match(/>([^<]+)</);
-                return match ? match[1] : '';
-              })
-              .join(', ')
-              || 'Azure Local documentation';
-          
-            const prompt = `You are a technical writer for Azure Local documentation.
-          Write a SHORT, 2-3 sentence blog post about Azure documentation changes.
-          Be concise and focus on practical impact for Azure Local operators.
-          
-          Changes made:
-          - ${changes}
-          
-          Updated pages: ${fileLinks}
-          
-          Write as plain HTML paragraphs (use <p> tags). 
-          Do NOT include links - those are added separately.
-          Keep it technical but accessible.`;
-          
+          async function callGitHubModels(prompt) {
             return new Promise((resolve, reject) => {
               const token = process.env.GITHUB_TOKEN;
-              const model = 'gpt-4o-mini'; // GitHub Models Claude alternative
+              if (!token) {
+                reject(new Error('GITHUB_TOKEN not set'));
+                return;
+              }
               
-              const data = JSON.stringify({
-                model: model,
+              const requestData = JSON.stringify({
+                model: 'claude-sonnet-4.5-20250514',
                 messages: [
                   {
                     role: 'user',
@@ -510,35 +484,83 @@ jobs:
               });
               
               const options = {
-                hostname: 'api.github.com',
-                port: 443,
-                path: '/repos/owner/repo/code-search/draft',
+                hostname: 'models.githubusercontentcdn.com',
+                path: '/v1/chat/completions',
                 method: 'POST',
                 headers: {
-                  'Authorization': 'Bearer ' + token,
+                  'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json',
-                  'Content-Length': data.length,
-                  'User-Agent': 'AX-Calc-Blog-Generator'
+                  'Content-Length': Buffer.byteLength(requestData)
                 }
               };
               
-              // Fallback: use local Claude to generate blog if API unavailable
-              console.log('🤖 Generating blog content with Copilot...');
+              const req = https.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  try {
+                    const response = JSON.parse(data);
+                    if (response.choices && response.choices[0]) {
+                      resolve(response.choices[0].message.content);
+                    } else {
+                      reject(new Error('Invalid response from GitHub Models: ' + data));
+                    }
+                  } catch (e) {
+                    reject(new Error('Failed to parse response: ' + e.message));
+                  }
+                });
+              });
               
-              // For now, return enhanced static content
-              const blogContent = `
-                <p class="article-text">Azure Local documentation has been updated with important changes affecting operators and administrators.</p>
-                <p class="article-text"><strong>Key areas updated:</strong> ${changes.split('- ').filter(s => s).slice(0, 2).join(', ')}. Review the updated pages to ensure your deployments remain compliant with the latest requirements.</p>
-              `.trim();
-              
-              resolve(blogContent);
+              req.on('error', reject);
+              req.write(requestData);
+              req.end();
             });
+          }
+          
+          async function generateBlogWithClaude(postData) {
+            // Extract changes from the HTML content
+            const changes = postData.content
+              .match(/<li>(.*?)<\/li>/g)
+              ?.map(li => li.replace(/<\/?li>/g, '').replace(/\(removed\)\s*-?\s*/, ''))
+              .filter(li => li.length > 5)
+              .slice(0, 3)
+              .join('\n- ')
+              || 'Documentation updates';
+          
+            const fileLinks = postData.content.match(/<a href="([^"]+)">([^<]+)<\/a>/g)
+              ?.slice(0, 3)
+              .map(a => {
+                const match = a.match(/>([^<]+)</);
+                return match ? match[1].trim() : '';
+              })
+              .filter(s => s)
+              .join(', ')
+              || 'Azure Local documentation';
+          
+            const prompt = `You are a technical writer for Azure Local documentation. Write a SHORT, 2-3 sentence blog post about Azure documentation changes. Be concise and focus on practical impact for Azure Local operators.
+
+Changes made:
+- ${changes}
+
+Updated pages: ${fileLinks}
+
+Write as plain HTML paragraphs (use <p> tags). Do NOT include links or markdown - those will be added separately. Keep it technical but accessible. Do not include the title or subtitle - just the body content.`;
+          
+            try {
+              console.log('Calling GitHub Models API with Claude Sonnet 4.5...');
+              const blogContent = await callGitHubModels(prompt);
+              return blogContent;
+            } catch (error) {
+              console.error('Error calling GitHub Models:', error.message);
+              // Fallback if API fails
+              return `<p class="article-text">Azure Local documentation has been updated with important changes. Key areas updated: ${changes.split('- ').filter(s => s).slice(0, 2).join(', ')}. Review the updated pages for details.</p>`;
+            }
           }
           
           async function main() {
             try {
               const postData = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-              const blogContent = await generateBlogWithCopilot(postData);
+              const blogContent = await generateBlogWithClaude(postData);
               
               const finalPost = {
                 ...postData,
@@ -547,14 +569,14 @@ jobs:
               };
               
               fs.writeFileSync(process.argv[2], JSON.stringify(finalPost));
-              console.log('✅ Blog post enhanced with Copilot');
+              console.log('✅ Blog post generated with Claude Sonnet 4.5');
               process.exit(0);
             } catch (error) {
               console.error('Error generating blog:', error);
-              // Fallback: use original post data if Copilot fails
+              // Fallback: use original post data if Claude fails
               const postData = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
               fs.writeFileSync(process.argv[2], JSON.stringify(postData));
-              console.log('⚠️ Using extracted content - Copilot generation skipped');
+              console.log('⚠️ Using extracted content - Claude generation failed');
               process.exit(0);
             }
           }

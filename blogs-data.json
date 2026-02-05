@@ -1,24 +1,5 @@
 {
-  "auto_posts": [
-    {
-      "id": "auto-2026-02-05-vdu263sa",
-      "title": "Azure Local Update — February 5, 2026",
-      "subtitle": "Documentation changes",
-      "date": "2026-02-05",
-      "content": "<p class=\"article-text\">- Documentation titles and headings have been standardized to use title case capitalization across Azure Local deployment guides, improving consistency but requiring no operational changes for any version deployments. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/?view=azloc-2601\">→ Documentation</a></p><p class=\"article-text\">- Azure role-based access control (RBAC) terminology has been clarified from \"RBAC roles\" to \"Azure role-based access control (RBAC)\" in VM deployment prerequisites, affecting documentation comprehension for all Azure Local deployments regardless of version. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/deploy/sql-server-23h2?view=azloc-2601\">→ Documentation</a></p><p class=\"article-text\">- VM image access requirements now specify \"Azure Local instance\" instead of just \"Azure Local\" and clarify that images can be created \"by using\" specific procedures rather than \"by\" procedures, providing clearer guidance for VM deployments on all Azure Local versions. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/whats-new?view=azloc-2601\">→ Documentation</a></p><p class=\"article-text\">- Connection instructions for Azure Local machines now explicitly state \"Azure Local instance\" and use \"enter the following command\" instead of \"Type:\", standardizing command execution documentation for all version deployments. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/manage/create-arc-virtual-machines?view=azloc-2601\">→ Documentation</a></p><p class=\"article-text\">- Azure Resource Manager templates are now consistently abbreviated as \"ARM templates\" in VM creation documentation, aligning with Microsoft's standard terminology across all Azure Local deployment scenarios.</p><p class=\"article-text\"><strong>Related documentation:</strong> <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/?view=azloc-2601\">Azure Local</a> • <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/deploy/sql-server-23h2?view=azloc-2601\">Deployment</a> • <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/whats-new?view=azloc-2601\">What's New</a> • <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/manage/create-arc-virtual-machines?view=azloc-2601\">Management</a></p>",
-      "source": "Azure Local Blog Monitor",
-      "auto_generated": true,
-      "claude_generated": true
-    },
-    {
-      "id": "auto-2026-02-05-tujxd50s",
-      "title": "Azure Local Update — February 5, 2026",
-      "subtitle": "Documentation changes",
-      "date": "2026-02-05",
-      "content": "<p class=\"article-text\">- <strong>Applies to upgrades from Azure Stack HCI 22H2 (out of support) to 23H2 or 24H2, and from 23H2 to 24H2.</strong> The LCM account must have explicit \"Log on as a batch job\" rights—a permission that is not automatically inherited from local Administrator group membership alone. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/upgrade/install-solution-upgrade?view=azloc-2601\">→ Solution upgrade prerequisites</a></p><p class=\"article-text\">- Operations teams upgrading from 22H2 (now out of support) need to configure this Active Directory right before running the solution upgrade, as the prerequisite validation now checks for this permission during the upgrade readiness phase.</p><p class=\"article-text\">- The \"Log on as a batch job\" policy must be added through Group Policy Editor (gppedit.msc) or Active Directory Group Policy: navigate to Computer Configuration > Windows Settings > Security Settings > Local Policies > User Rights Assignment.</p><p class=\"article-text\">- This requirement affects solution upgrades initiated via the Azure portal's upgrade workflow. Teams should audit existing LCM accounts before beginning the upgrade process to avoid validation failures.</p><p class=\"article-text\">- Missing this permission may cause the solution upgrade prerequisites validation to fail with authentication-related errors; verify compliance before initiating the upgrade from your <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/upgrade/validate-solution-upgrade-readiness?view=azloc-2601\">solution upgrade readiness check</a>.</p><p class=\"article-text\"><strong>Related documentation:</strong> <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/upgrade/install-solution-upgrade?view=azloc-2601\">Install solution upgrade on Azure Local</a></p>",
-      "source": "Azure Local Blog Monitor",
-      "auto_generated": true,
-      "claude_generated": true
-    }
-  ]
+    "auto_posts":  [
+
+                   ]
 }

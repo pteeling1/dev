@@ -82,23 +82,28 @@ function httpPost(hostname, requestPath, data, headers = {}) {
 
 // Call Claude API
 async function callClaudeAPI(prompt, githubToken) {
-  console.log('📝 Calling Claude API...');
+  console.log('📝 Calling Claude API via Anthropic...');
+  
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable not set');
+  }
   
   const response = await httpPost(
-    'api.github.com',
-    '/models/chat/completions',
+    'api.anthropic.com',
+    '/v1/messages',
     {
-      model: 'claude-3.5-sonnet',
-      messages: [{ role: 'user', content: prompt }],
+      model: 'claude-opus-4-1',
       max_tokens: 1024,
-      temperature: 0.7
+      messages: [{ role: 'user', content: prompt }]
     },
     {
-      'Authorization': `Bearer ${githubToken}`
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
     }
   );
 
-  const content = response?.choices?.[0]?.message?.content;
+  const content = response?.content?.[0]?.text;
   if (!content) {
     throw new Error('No content in Claude response');
   }
@@ -222,10 +227,12 @@ async function main() {
     // Check for test mode
     const testMode = process.env.TEST_MODE === 'true';
     
-    // Check for GitHub token
+    // Check for GitHub token or Anthropic API key
     const githubToken = process.env.GITHUB_TOKEN || process.env.COPILOT_API_TOKEN;
-    if (!githubToken && !testMode) {
-      throw new Error('GITHUB_TOKEN or COPILOT_API_TOKEN environment variable not set');
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    
+    if (!testMode && !githubToken && !anthropicKey) {
+      throw new Error('Please set TEST_MODE=true, GITHUB_TOKEN, or ANTHROPIC_API_KEY');
     }
     
     if (testMode) {

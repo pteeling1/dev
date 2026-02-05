@@ -118,6 +118,7 @@ async function fetchAzureLocalCommits() {
   console.log('🔍 Fetching Azure Local commits...');
   
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  // Fetch commits and then filter for Azure Local specific paths
   const response = await httpGet(
     'api.github.com',
     `/repos/MicrosoftDocs/azure-stack-docs/commits?sha=main&since=${sevenDaysAgo}&per_page=100`
@@ -128,8 +129,16 @@ async function fetchAzureLocalCommits() {
     return [];
   }
 
-  console.log(`✅ Found ${response.length} commits in past 7 days`);
-  return response;
+  // Filter for Azure Local related commits by checking touched files
+  // Azure Local docs are typically in /azure-stack/user/azure-local/* or similar paths
+  const azureLocalCommits = response.filter(commit => {
+    // We'll need full commit data to see files, so for now filter by message
+    const message = commit.commit?.message || '';
+    return /azure.?local|azure\/local|hci|batch.?job|permission/i.test(message);
+  });
+
+  console.log(`✅ Found ${response.length} total commits, ${azureLocalCommits.length} Azure Local related`);
+  return azureLocalCommits.length > 0 ? azureLocalCommits : response.slice(0, 5); // Fallback to first 5 if no matches
 }
 
 // Fetch full commit with diffs

@@ -514,7 +514,7 @@ async function main() {
     
     const needsBackfill = !blogsData.auto_posts || blogsData.auto_posts.length === 0;
     if (needsBackfill) {
-      console.log('📚 Blog data is empty - will backfill with ALL operational changes from past 7 days\n');
+      console.log('📚 Blog data is empty - will backfill with up to 5 operational changes from past 7 days\n');
     }
     
     if (testMode) {
@@ -553,14 +553,28 @@ async function main() {
       }
     }
 
-    // If backfilling, process ALL commits; otherwise process just the most recent
-    const commitsToProcess = needsBackfill ? commits : commits.slice(0, 1);
+    // If backfilling, process UP TO 5 commits; otherwise process just the most recent
+    // This prevents token waste on massive backfills
+    const maxBackfillCommits = 5;
+    const commitsToProcess = needsBackfill 
+      ? commits.slice(0, maxBackfillCommits)
+      : commits.slice(0, 1);
     
-    console.log(`\n📝 Processing ${commitsToProcess.length} commit(s)...\n`);
+    console.log(`\n📝 Processing ${commitsToProcess.length} commit(s) (max ${maxBackfillCommits} for backfill)...\n`);
 
     for (const commit of commitsToProcess) {
       try {
         let fullCommit = commit;
+        
+        // Pre-filter: Check commit message for obvious non-operational patterns
+        const message = commit.commit?.message || '';
+        const isObviouslyCosmeticMessage = /^(style|docs?|chore|format|typo|whitespace|lint|ci|test|refactor\s+naming)/i.test(message) 
+          && !/prerequisite|permission|security|requirement|must|breaking|deploy|upgrade/i.test(message);
+        
+        if (isObviouslyCosmeticMessage) {
+          console.log(`⏭️  Skipping commit ${commit.sha?.slice(0, 7) || 'unknown'}: message suggests cosmetic changes`);
+          continue;
+        }
         
         // If we just have the summary, fetch full details
         if (!commit.files) {

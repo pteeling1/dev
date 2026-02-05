@@ -1,5 +1,14 @@
 {
-    "auto_posts":  [
-
-                   ]
+  "auto_posts": [
+    {
+      "id": "auto-2026-02-05-s4w1bklq",
+      "title": "Azure Local Update — February 5, 2026",
+      "subtitle": "Documentation changes",
+      "date": "2026-02-05",
+      "content": "<p class=\"article-text\">Azure Local deployment documentation has been updated to reflect the latest v1.2.3 release. Key changes include improved prerequisite documentation and additional guidance for cluster operators. This update simplifies the deployment experience and reduces common configuration errors.</p><p class=\"article-text\"><a href=\"https://github.com/MicrosoftDocs/azure-stack-docs/commit/abc1234\">View full commit on GitHub →</a></p>",
+      "source": "Azure Local Blog Monitor",
+      "auto_generated": true,
+      "claude_generated": true
+    }
+  ]
 }

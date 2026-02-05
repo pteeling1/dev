@@ -153,8 +153,25 @@ async function fetchFullCommit(sha) {
 
 // Map GitHub path to docs.microsoft.com URL
 function githubPathToDocsUrl(filepath) {
-  // azure-local/deploy/sql-server-23h2.md -> https://learn.microsoft.com/en-us/azure/azure-local/deploy/sql-server-23h2?view=azloc-2601
-  const cleanPath = filepath.replace(/\.md$/, '');
+  // Some files don't have direct public URLs on learn.microsoft.com
+  // Link to the most relevant published documentation page instead
+  
+  let cleanPath = filepath.replace(/\.md$/, '');
+  
+  // AKS-Arc files -> link to Azure Local documentation
+  if (cleanPath.startsWith('AKS-Arc/')) {
+    return `https://learn.microsoft.com/en-us/azure/azure-local/?view=azloc-2601`;
+  }
+  
+  // Include files are internal, link to relevant topic
+  if (cleanPath.includes('/includes/')) {
+    if (cleanPath.includes('vm-prerequisites')) {
+      return `https://learn.microsoft.com/en-us/azure/azure-local/?view=azloc-2601`;
+    }
+    return `https://learn.microsoft.com/en-us/azure/azure-local/whats-new?view=azloc-2601`;
+  }
+  
+  // Standard mapping
   return `https://learn.microsoft.com/en-us/azure/${cleanPath}?view=azloc-2601`;
 }
 

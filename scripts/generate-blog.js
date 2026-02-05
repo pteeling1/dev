@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Production Blog Generation - Trigger workflow test
+// Production Blog Generation - Ready for deployment
 const https = require('https');
 const fs = require('fs');
 const path = require('path');

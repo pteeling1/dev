@@ -153,9 +153,9 @@ async function fetchFullCommit(sha) {
 
 // Map GitHub path to docs.microsoft.com URL
 function githubPathToDocsUrl(filepath) {
-  // azure-stack/docs/some-doc.md -> https://learn.microsoft.com/en-us/azure/azure-local/some-doc
-  const cleanPath = filepath.replace(/\.md$/, '').split('/').slice(2).join('/');
-  return `https://learn.microsoft.com/en-us/azure/azure-local/${cleanPath}`;
+  // azure-local/deploy/sql-server-23h2.md -> https://learn.microsoft.com/en-us/azure/azure-local/deploy/sql-server-23h2?view=azloc-2601
+  const cleanPath = filepath.replace(/\.md$/, '');
+  return `https://learn.microsoft.com/en-us/azure/${cleanPath}?view=azloc-2601`;
 }
 
 // Parse diff to extract meaningful added/removed lines

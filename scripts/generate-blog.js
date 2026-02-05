@@ -153,8 +153,9 @@ async function fetchFullCommit(sha) {
 
 // Map GitHub path to docs.microsoft.com URL
 function githubPathToDocsUrl(filepath) {
-  const cleanPath = filepath.replace(/\.md$/, '').replace(/^.*?\//, '');
-  return `https://learn.microsoft.com/en-us/azure-stack/${cleanPath}`;
+  // azure-stack/docs/some-doc.md -> https://learn.microsoft.com/en-us/azure/azure-local/some-doc
+  const cleanPath = filepath.replace(/\.md$/, '').split('/').slice(2).join('/');
+  return `https://learn.microsoft.com/en-us/azure/azure-local/${cleanPath}`;
 }
 
 // Parse diff to extract meaningful added/removed lines
@@ -242,17 +243,26 @@ function createBlogPost(claudeContent, fullCommit) {
     .map(p => `<p class="article-text">${p.trim()}</p>`)
     .join('');
 
-  // Link to the primary docs page being updated
-  const mainFile = (fullCommit.files || [])[0];
-  const docsUrl = mainFile ? githubPathToDocsUrl(mainFile.filename) : 'https://learn.microsoft.com/en-us/azure-stack/';
-  const linkHtml = `<p class="article-text"><a href="${docsUrl}">📖 Read the updated documentation →</a></p>`;
+  // Create links for all updated documentation files
+  const docsLinks = (fullCommit.files || [])
+    .slice(0, 10) // Limit to 10 docs to avoid clutter
+    .map((file, idx) => {
+      const url = githubPathToDocsUrl(file.filename);
+      const fileLabel = file.filename.split('/').pop().replace(/\.md$/, '');
+      return `<a href="${url}">${fileLabel}</a>`;
+    })
+    .join(' • ');
+  
+  const docsSection = docsLinks 
+    ? `<p class="article-text"><strong>Updated documentation:</strong> ${docsLinks}</p>`
+    : '';
 
   return {
     id: `auto-${dateStr}-${Math.random().toString(36).slice(2, 10)}`,
     title: `Azure Local Update — ${dateDisplay}`,
     subtitle: 'Documentation changes',
     date: dateStr,
-    content: htmlContent + linkHtml,
+    content: htmlContent + docsSection,
     source: 'Azure Local Blog Monitor',
     auto_generated: true,
     claude_generated: true

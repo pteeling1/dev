@@ -55,24 +55,36 @@ jobs:
       - name: Generate blog with Claude
         id: generate-blog
         run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "⚠️  ANTHROPIC_API_KEY not set, skipping Claude blog generation"
+            echo "blog_post=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           # Use the enhanced generate-blog.js script
           node scripts/generate-blog.js > /tmp/blog.json 2>&1
+          RESULT=$?
           
           # Log the output for debugging
           echo "Blog generation output:"
           cat /tmp/blog.json
           
-          if [ -f /tmp/blog.json ] && [ -s /tmp/blog.json ] && [ "$(cat /tmp/blog.json | wc -l)" -gt 0 ]; then
+          if [ $RESULT -eq 0 ] && [ -f /tmp/blog.json ] && [ -s /tmp/blog.json ]; then
             # Check if we got a valid post (not an error message)
-            if grep -q '"id"' /tmp/blog.json; then
+            if grep -q '"id"' /tmp/blog.json 2>/dev/null; then
               echo "blog_post<<EOFBLOG" >> $GITHUB_OUTPUT
               cat /tmp/blog.json >> $GITHUB_OUTPUT
               echo "EOFBLOG" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️  No valid blog post generated (script ran but no blog content)"
             fi
+          else
+            echo "⚠️  Blog generation failed with exit code $RESULT"
           fi
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
       
       - name: Update blogs-data.json
         run: |

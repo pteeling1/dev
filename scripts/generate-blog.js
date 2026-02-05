@@ -1,0 +1,304 @@
+#!/usr/bin/env node
+
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
+// Utility: Make HTTPS request and return parsed JSON
+function httpGet(hostname, requestPath, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname,
+      path: requestPath,
+      method: 'GET',
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Azure-Local-Blog-Generator',
+        ...headers
+      }
+    };
+
+    https.get(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+        } else {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(new Error(`JSON parse error: ${e.message}`));
+          }
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Utility: Make HTTPS POST request (for Claude API)
+function httpPost(hostname, requestPath, data, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const jsonData = JSON.stringify(data);
+    const options = {
+      hostname,
+      path: requestPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(jsonData),
+        'User-Agent': 'Azure-Local-Blog-Generator',
+        ...headers
+      },
+      timeout: 30000
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+        } else {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(new Error(`JSON parse error: ${e.message}`));
+          }
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    req.write(jsonData);
+    req.end();
+  });
+}
+
+// Call Claude API
+async function callClaudeAPI(prompt, githubToken) {
+  console.log('📝 Calling Claude API...');
+  
+  const response = await httpPost(
+    'api.github.com',
+    '/models/chat/completions',
+    {
+      model: 'claude-3.5-sonnet',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1024,
+      temperature: 0.7
+    },
+    {
+      'Authorization': `Bearer ${githubToken}`
+    }
+  );
+
+  const content = response?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('No content in Claude response');
+  }
+
+  console.log('✅ Claude response received');
+  return content;
+}
+
+// Fetch recent Azure Local commits
+async function fetchAzureLocalCommits() {
+  console.log('🔍 Fetching Azure Local commits...');
+  
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const response = await httpGet(
+    'api.github.com',
+    `/repos/MicrosoftDocs/azure-stack-docs/commits?sha=main&since=${sevenDaysAgo}&per_page=50`
+  );
+
+  if (!Array.isArray(response) || response.length === 0) {
+    console.log('⚠️  No commits found in past 7 days');
+    return null;
+  }
+
+  console.log(`✅ Found ${response.length} commits`);
+
+  // Find an Azure Local-related commit
+  let commit = response.find(c => 
+    /azure.local|azure\/local|deployment|upgrade/i.test(c.commit.message)
+  ) || response[0];
+
+  console.log(`📌 Selected commit: ${commit.sha.slice(0, 7)}`);
+  return commit;
+}
+
+// Fetch full commit with diffs
+async function fetchFullCommit(sha) {
+  console.log(`📂 Fetching full commit details...`);
+  
+  const response = await httpGet(
+    'api.github.com',
+    `/repos/MicrosoftDocs/azure-stack-docs/commits/${sha}`
+  );
+
+  console.log(`✅ Retrieved ${response.files?.length || 0} files`);
+  return response;
+}
+
+// Build the prompt for Claude
+function buildPrompt(fullCommit) {
+  const files = fullCommit.files || [];
+  
+  const fileList = files
+    .map(f => `- ${f.filename}: +${f.additions} -${f.deletions}`)
+    .join('\n');
+
+  const diffs = files
+    .slice(0, 3)
+    .map(f => f.patch || '')
+    .filter(p => p)
+    .join('\n\n')
+    .slice(0, 2500);
+
+  return `You are an Azure Local infrastructure expert writing technical blog posts for operations teams.
+
+Analyze this Azure Local documentation change and write a 90-120 word technical blog post:
+
+**Commit Message:**
+${fullCommit.commit.message}
+
+**Files Changed:**
+${fileList}
+
+**Diff Preview (first 2500 chars):**
+${diffs}
+
+**Requirements:**
+1. Explain WHAT changed and WHY it matters for operations teams
+2. Be SPECIFIC - reference actual file changes, new fields, removed steps, etc.
+3. Mention OPERATIONAL IMPACT - what ops engineers need to do
+4. Keep it TECHNICAL but ACCESSIBLE - assume reader is experienced ops engineer
+5. Format as plain text paragraphs, NO markdown`;
+}
+
+// Generate blog post object
+function createBlogPost(claudeContent, fullCommit) {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const dateDisplay = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  // Convert Claude's response to HTML paragraphs
+  const htmlContent = claudeContent
+    .split('\n\n')
+    .filter(p => p.trim())
+    .map(p => `<p class="article-text">${p.trim()}</p>`)
+    .join('');
+
+  const linkHtml = `<p class="article-text"><a href="https://github.com/MicrosoftDocs/azure-stack-docs/commit/${fullCommit.sha.slice(0, 7)}">View full commit on GitHub →</a></p>`;
+
+  return {
+    id: `auto-${dateStr}-${Math.random().toString(36).slice(2, 10)}`,
+    title: `Azure Local Update — ${dateDisplay}`,
+    subtitle: 'Documentation changes',
+    date: dateStr,
+    content: htmlContent + linkHtml,
+    source: 'Azure Local Blog Monitor',
+    auto_generated: true,
+    claude_generated: true
+  };
+}
+
+// Main execution
+async function main() {
+  try {
+    console.log('🚀 Azure Local Blog Generator');
+    console.log('================================\n');
+
+    // Check for test mode
+    const testMode = process.env.TEST_MODE === 'true';
+    
+    // Check for GitHub token
+    const githubToken = process.env.GITHUB_TOKEN || process.env.COPILOT_API_TOKEN;
+    if (!githubToken && !testMode) {
+      throw new Error('GITHUB_TOKEN or COPILOT_API_TOKEN environment variable not set');
+    }
+    
+    if (testMode) {
+      console.log('🧪 Running in TEST MODE (using mock data)\n');
+    }
+
+    // Fetch commits
+    let commit, fullCommit, claudeContent;
+    
+    if (testMode) {
+      // Mock data for testing
+      commit = {
+        sha: 'abc1234567890def',
+        commit: { message: 'Docs: Update Azure Local deployment guide' }
+      };
+      fullCommit = {
+        sha: 'abc1234567890def',
+        commit: { message: 'Docs: Update Azure Local deployment guide for v1.2.3' },
+        files: [
+          { filename: 'docs/deploy-azure-local.md', additions: 25, deletions: 12, patch: '--- a/docs/deploy-azure-local.md\n+++ b/docs/deploy-azure-local.md\n@@ -45,7 +45,10 @@\n ## Prerequisites\n\n+Updated for Azure Local v1.2.3\n These are the minimum requirements:' }
+        ]
+      };
+      claudeContent = 'Azure Local deployment documentation has been updated to reflect the latest v1.2.3 release. Key changes include improved prerequisite documentation and additional guidance for cluster operators. This update simplifies the deployment experience and reduces common configuration errors.';
+    } else {
+      commit = await fetchAzureLocalCommits();
+      if (!commit) {
+        console.log('💤 No commits found, skipping blog generation');
+        process.exit(0);
+      }
+
+      // Get full commit with diffs
+      fullCommit = await fetchFullCommit(commit.sha);
+
+      // Call Claude to generate blog content
+      claudeContent = await callClaudeAPI(buildPrompt(fullCommit), githubToken);
+    }
+
+    // Create blog post object
+    const blogPost = createBlogPost(claudeContent, fullCommit);
+
+    // Read blogs-data.json
+    const blogsDataPath = path.join(__dirname, '..', 'blogs-data.json');
+    console.log(`\n📖 Updating ${blogsDataPath}...`);
+
+    let blogsData = { auto_posts: [] };
+    if (fs.existsSync(blogsDataPath)) {
+      const content = fs.readFileSync(blogsDataPath, 'utf8');
+      try {
+        blogsData = JSON.parse(content);
+      } catch (e) {
+        console.warn('⚠️  Could not parse existing blogs-data.json, starting fresh');
+      }
+    }
+
+    // Add new post to beginning of array
+    if (!Array.isArray(blogsData.auto_posts)) {
+      blogsData.auto_posts = [];
+    }
+    blogsData.auto_posts.unshift(blogPost);
+
+    // Write back to file
+    fs.writeFileSync(blogsDataPath, JSON.stringify(blogsData, null, 2));
+    console.log(`✅ Blog post added! Total posts: ${blogsData.auto_posts.length}`);
+
+    console.log('\n📝 Generated Blog Post:');
+    console.log(`   Title: ${blogPost.title}`);
+    console.log(`   Content length: ${blogPost.content.length} chars`);
+    console.log(`   ID: ${blogPost.id}`);
+
+  } catch (error) {
+    console.error(`\n❌ Error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+main();

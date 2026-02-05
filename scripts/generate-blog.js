@@ -228,11 +228,14 @@ function buildPrompt(fullCommit) {
       !line.match(/^(ms\.|author:|ms\.date:|description:)/) 
     );
     
+    // Include the first 2 significant lines for better context
     if (significantRemoved.length > 0) {
-      changes.push(`Removed: ${significantRemoved[0]}`);
+      const removedContext = significantRemoved.slice(0, 2).join(' | ');
+      changes.push(`Removed: ${removedContext}`);
     }
     if (significantAdded.length > 0) {
-      changes.push(`Added: ${significantAdded[0]}`);
+      const addedContext = significantAdded.slice(0, 2).join(' | ');
+      changes.push(`Added: ${addedContext}`);
     } else if (c.added.length > 0) {
       // If only metadata was added, show that
       changes.push(`Updated: ${c.added[0]}`);
@@ -261,6 +264,12 @@ ${changesList}
 Create a bulleted list (5-8 bullets) describing the changes. Each bullet should be ONE SENTENCE and clearly explain:
 - What changed in the documentation
 - Why operations teams need to know about it
+- Specific version applicability (e.g., "Applies to upgrades from Azure Stack HCI 22H2 to 23H2 or 24H2" or "For all new 24H2 deployments")
+
+CRITICAL: Search the content snippets for any mention of:
+- Version numbers (22H2, 23H2, 24H2, 20349, 25398, 26100)
+- "upgrade from" or "upgrade to" language
+- "applies to" or "only for" qualifiers
 
 Include only changes that affect deployments, procedures, or requirements. If you can't find any substantive changes worth blogging about, create an empty response.
 

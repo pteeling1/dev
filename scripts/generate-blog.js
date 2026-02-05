@@ -219,12 +219,25 @@ function buildPrompt(fullCommit) {
   const changesWithUrls = meaningfulChanges.map(c => {
     const filename = c.file.split('/').pop().replace(/\.md$/, '');
     let changes = [];
-    if (c.removed.length > 0) {
-      changes.push(`Removed: ${c.removed[0]}`);
+    
+    // Find the most significant changes, skipping metadata lines
+    const significantAdded = c.added.filter(line => 
+      !line.match(/^(ms\.|author:|ms\.date:|description:)/) 
+    );
+    const significantRemoved = c.removed.filter(line => 
+      !line.match(/^(ms\.|author:|ms\.date:|description:)/) 
+    );
+    
+    if (significantRemoved.length > 0) {
+      changes.push(`Removed: ${significantRemoved[0]}`);
     }
-    if (c.added.length > 0) {
-      changes.push(`Added: ${c.added[0]}`);
+    if (significantAdded.length > 0) {
+      changes.push(`Added: ${significantAdded[0]}`);
+    } else if (c.added.length > 0) {
+      // If only metadata was added, show that
+      changes.push(`Updated: ${c.added[0]}`);
     }
+    
     return {
       filename,
       url: c.docsUrl,
@@ -238,14 +251,23 @@ function buildPrompt(fullCommit) {
     return `- **${c.filename}** (${c.url}): ${c.change}${summary}`;
   }).join('\n');
 
-  return `You are an Azure Local infrastructure expert. Analyze these documentation changes and generate a bulleted list for operations teams.
+  return `You are an Azure Local infrastructure expert. Analyze these documentation changes and create a technical blog post.
 
 COMMIT: ${fullCommit.commit.message}
 
 FILES CHANGED:
 ${changesList}
 
-Generate a bulleted list (5-8 bullets) where EACH bullet is ONE SENTENCE describing what changed and why ops teams care. Be specific and actionable. Return ONLY the bulleted list.`;
+Create a bulleted list (5-8 bullets) describing the changes. Each bullet should be ONE SENTENCE and clearly explain:
+- What changed in the documentation
+- Why operations teams need to know about it
+
+Include only changes that affect deployments, procedures, or requirements. If you can't find any substantive changes worth blogging about, create an empty response.
+
+Format each bullet as:
+- Description of change and operational impact
+
+Return ONLY the bulleted list, nothing else.`;
 }
 
 // Generate blog post object
@@ -376,6 +398,13 @@ async function main() {
 
       // Call Claude to generate blog content
       claudeContent = await callClaudeAPI(buildPrompt(fullCommit), githubToken);
+      
+      // Check if Claude decided not to generate a blog (empty response)
+      const bulletLines = claudeContent.trim().split('\n').filter(line => line.trim().startsWith('-'));
+      if (bulletLines.length === 0) {
+        console.log('⏭️  No substantive changes found for blog post');
+        process.exit(0);
+      }
     }
 
     // Create blog post object

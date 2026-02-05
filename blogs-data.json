@@ -1,0 +1,14 @@
+{
+  "auto_posts": [
+    {
+      "id": "auto-2026-02-05-ge928ny9",
+      "title": "Azure Local Update — February 5, 2026",
+      "subtitle": "Documentation changes",
+      "date": "2026-02-05",
+      "content": "<p class=\"article-text\">- The Azure Local (formerly Azure Stack HCI) LCM user account now requires explicit \"Log on as a batch job\" rights in addition to local Administrator group membership, which operations teams must configure during deployment preparation. <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/upgrade/install-solution-upgrade?view=azloc-2601\">→ Documentation</a></p><p class=\"article-text\">- This additional permission requirement affects both new deployments and upgrades to Azure Local version 26.01, requiring teams to modify their Active Directory user provisioning procedures.</p><p class=\"article-text\">- The change impacts automated deployment workflows and scripts that create LCM accounts, as they must now include steps to grant batch job logon rights through Group Policy or Local Security Policy.</p><p class=\"article-text\">- Operations teams managing existing Azure Local environments should audit their current LCM accounts to ensure they have this permission before attempting solution upgrades.</p><p class=\"article-text\">- The requirement suggests the LCM account will execute scheduled or background tasks during lifecycle management operations, making this permission critical for proper system functioning.</p><p class=\"article-text\"><strong>Related documentation:</strong> <a href=\"https://learn.microsoft.com/en-us/azure/azure-local/upgrade/install-solution-upgrade?view=azloc-2601\">Azure Local</a></p>",
+      "source": "Azure Local Blog Monitor",
+      "auto_generated": true,
+      "claude_generated": true
+    }
+  ]
+}

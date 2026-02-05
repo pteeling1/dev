@@ -376,7 +376,7 @@ async function buildPromptWithFullContext(fullCommit) {
     contextSection += `\n\nPREVIOUS VERSION (before this commit):\n\`\`\`\n${previousContext}\n\`\`\``;
   }
 
-  return `You are an Azure Local infrastructure expert. Your job is to identify OPERATIONAL IMPACT, not documentation cosmetics.
+  return `You are an Azure Local infrastructure expert. Your ONLY job is to identify changes that have OPERATIONAL IMPACT.
 
 COMMIT: ${fullCommit.commit.message}
 
@@ -384,30 +384,33 @@ SPECIFIC CHANGES IN THIS COMMIT:
 ${changesList}
 ${contextSection}
 
-YOUR TASK: Determine if these changes are worth blogging about. Operations teams care about:
-✅ IMPORTANT: Prerequisites, permissions, security requirements, supported configurations, procedures that must be followed
-✅ IMPORTANT: Version-specific guidance, compatibility information, upgrade paths
-✅ IMPORTANT: Error resolutions, troubleshooting procedures, known issues
-❌ NOT IMPORTANT: Title case corrections, terminology changes, rewording for clarity, documentation cleanup
+*** REJECT WITH [NO_BLOG] IF ***
+ANY of these patterns apply (even if just ONE matches):
+1. Capitalization changes: "RBAC roles" changed to "Azure role-based access control (RBAC)"
+2. Rewording without changing requirements: "Type the following" → "Enter the following command"
+3. Grammar/punctuation: Adding commas, fixing typos, improving readability
+4. Terminology consistency: Changing "VM image" to "Virtual Machine image" throughout doc
+5. Style standardization: Changing "Title" to "title case" in headings
+6. Clarification that doesn't change procedure: "You can create" → "You can create"
+7. Documentation cleanup: Reorganizing sections without changing content
 
-If changes are primarily cosmetic (just rewording, formatting, terminology cleanup), respond with ONLY: [NO_BLOG]
+If any of the above patterns describe the ENTIRE commit, respond with ONLY: [NO_BLOG]
 
-Otherwise, create a bulleted list (5-8 bullets) describing the changes. Each bullet should be ONE SENTENCE and explain:
-- What OPERATIONAL or PROCEDURAL change was made
-- Why ops engineers and architects MUST know about this
-- Specific version applicability (e.g., "Applies to upgrades from Azure Stack HCI 22H2 to 23H2 or 24H2" or "For all new 24H2 deployments")
+*** ACCEPT IF (and ONLY if) ANY of these apply ***
+1. NEW prerequisite, permission, or configuration requirement (e.g., "must have 'Log on as batch job'")
+2. Security policy or access control change
+3. NEW procedure or procedural step change
+4. Version compatibility change or breaking change
+5. NEW error condition or troubleshooting procedure
+6. Architectural or infrastructure change
 
-CRITICAL ANALYSIS:
-- Only include changes that affect HOW operations teams deploy, configure, or troubleshoot Azure Local
-- Ignore changes that are just documentation improvements (grammar, style, terminology)
-- If the document talks about "solution upgrades" or "upgrade from version X", this affects upgrades only, not fresh deployments
-- Look for "prerequisite", "must", "requirement", "security", "permission", "procedure" - these matter
-- Check if version numbers appear (22H2, 23H2, 24H2) - this indicates version-specific scope
+Otherwise, create a bulleted list (5-8 bullets):
+- Focus on OPERATIONAL IMPACT: What must ops teams DO differently?
+- Include version scope: "Applies to: 22H2→23H2 upgrades" or "All 24H2 fresh deployments"
+- One sentence per bullet
+- Why ops/architects MUST know this
 
-Format each bullet as:
-- Description of change and why it matters
-
-Return ONLY the bulleted list, OR return ONLY the text: [NO_BLOG] if changes are cosmetic.`;
+Return ONLY the bulleted list, OR return ONLY: [NO_BLOG]`;
 }
 
 // Generate blog post object

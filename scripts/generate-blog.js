@@ -151,6 +151,53 @@ async function fetchFullCommit(sha) {
   return response;
 }
 
+// Fetch raw file content from a specific commit
+async function fetchFileContent(filepath, sha) {
+  try {
+    const response = await httpGet(
+      'raw.githubusercontent.com',
+      `/MicrosoftDocs/azure-stack-docs/${sha}/${filepath}`
+    );
+    
+    // raw.githubusercontent.com returns text directly, not JSON
+    return response;
+  } catch (error) {
+    console.warn(`⚠️  Could not fetch file content for ${filepath}: ${error.message}`);
+    return null;
+  }
+}
+
+// Fetch previous version of a file (from parent commit)
+async function fetchPreviousVersion(filepath, fullCommit) {
+  try {
+    if (!fullCommit.parents || fullCommit.parents.length === 0) {
+      return null; // First commit, no previous version
+    }
+    
+    const parentSha = fullCommit.parents[0].sha;
+    const response = await httpGet(
+      'api.github.com',
+      `/repos/MicrosoftDocs/azure-stack-docs/commits/${parentSha}`,
+      { 'Accept': 'application/vnd.github.v3.raw+json' }
+    );
+    
+    if (!response || !response.commit) {
+      return null;
+    }
+    
+    // Now fetch the actual file content using raw GitHub URL
+    const fileContent = await httpGet(
+      'raw.githubusercontent.com',
+      `/MicrosoftDocs/azure-stack-docs/${parentSha}/${filepath}`
+    );
+    
+    return fileContent;
+  } catch (error) {
+    console.warn(`⚠️  Could not fetch previous version of ${filepath}: ${error.message}`);
+    return null;
+  }
+}
+
 // Map GitHub path to docs.microsoft.com URL
 function githubPathToDocsUrl(filepath) {
   // Some files don't have direct public URLs on learn.microsoft.com
@@ -210,17 +257,41 @@ function extractMeaningfulDiffs(files) {
   return changes;
 }
 
-// Build the prompt for Claude
-function buildPrompt(fullCommit) {
+// Build the prompt for Claude with full document context
+async function buildPromptWithFullContext(fullCommit) {
   const files = fullCommit.files || [];
-  const meaningfulChanges = extractMeaningfulDiffs(files);
   
-  // Create structured change descriptions with links
+  // For the first modified Azure Local file, fetch full document + previous version
+  let documentContext = '';
+  let previousContext = '';
+  
+  for (const file of files.slice(0, 3)) {
+    if (file.filename.includes('azure-local') || file.filename.includes('AKS-Arc')) {
+      console.log(`📄 Fetching full document context for ${file.filename}...`);
+      
+      // Fetch current version
+      const currentContent = await fetchFileContent(file.filename, fullCommit.sha);
+      if (currentContent) {
+        // Truncate to reasonable length (first 3000 chars which is ~500 lines)
+        documentContext = currentContent.substring(0, 3000);
+      }
+      
+      // Fetch previous version for comparison
+      const previousContent = await fetchPreviousVersion(file.filename, fullCommit);
+      if (previousContent) {
+        previousContext = previousContent.substring(0, 2000);
+      }
+      
+      if (documentContext) break; // Got what we need
+    }
+  }
+
+  // Fall back to diff-based approach if full content not available
+  const meaningfulChanges = extractMeaningfulDiffs(files);
   const changesWithUrls = meaningfulChanges.map(c => {
     const filename = c.file.split('/').pop().replace(/\.md$/, '');
     let changes = [];
     
-    // Find the most significant changes, skipping metadata lines
     const significantAdded = c.added.filter(line => 
       !line.match(/^(ms\.|author:|ms\.date:|description:)/) 
     );
@@ -228,7 +299,6 @@ function buildPrompt(fullCommit) {
       !line.match(/^(ms\.|author:|ms\.date:|description:)/) 
     );
     
-    // Include the first 2 significant lines for better context
     if (significantRemoved.length > 0) {
       const removedContext = significantRemoved.slice(0, 2).join(' | ');
       changes.push(`Removed: ${removedContext}`);
@@ -237,7 +307,6 @@ function buildPrompt(fullCommit) {
       const addedContext = significantAdded.slice(0, 2).join(' | ');
       changes.push(`Added: ${addedContext}`);
     } else if (c.added.length > 0) {
-      // If only metadata was added, show that
       changes.push(`Updated: ${c.added[0]}`);
     }
     
@@ -249,27 +318,36 @@ function buildPrompt(fullCommit) {
   }).slice(0, 8);
 
   const changesList = changesWithUrls.map(c => {
-    const lines = (c.added || []).concat(c.removed || []);
-    const summary = lines.length > 0 ? `\n      Content: ${lines.join(' | ')}` : '';
-    return `- **${c.filename}** (${c.url}): ${c.change}${summary}`;
+    return `- **${c.filename}**: ${c.change}`;
   }).join('\n');
+
+  // Build context sections
+  let contextSection = '';
+  if (documentContext) {
+    contextSection += `\nCURRENT DOCUMENT SECTION:\n\`\`\`\n${documentContext}\n\`\`\``;
+  }
+  if (previousContext) {
+    contextSection += `\n\nPREVIOUS VERSION (before this commit):\n\`\`\`\n${previousContext}\n\`\`\``;
+  }
 
   return `You are an Azure Local infrastructure expert. Analyze these documentation changes and create a technical blog post.
 
 COMMIT: ${fullCommit.commit.message}
 
-FILES CHANGED:
+SPECIFIC CHANGES IN THIS COMMIT:
 ${changesList}
+${contextSection}
 
 Create a bulleted list (5-8 bullets) describing the changes. Each bullet should be ONE SENTENCE and clearly explain:
 - What changed in the documentation
 - Why operations teams need to know about it
 - Specific version applicability (e.g., "Applies to upgrades from Azure Stack HCI 22H2 to 23H2 or 24H2" or "For all new 24H2 deployments")
 
-CRITICAL: Search the content snippets for any mention of:
-- Version numbers (22H2, 23H2, 24H2, 20349, 25398, 26100)
-- "upgrade from" or "upgrade to" language
-- "applies to" or "only for" qualifiers
+CRITICAL ANALYSIS:
+- If the document talks about "solution upgrades" or "upgrade from version X", this is for upgrades only, not new deployments
+- Look for phrases like "22H2", "23H2", "24H2" or "20349", "25398", "26100" (OS version numbers)
+- If comparing with previous version: did this requirement exist before? If not, is it new for new deployments or only for upgrades?
+- Search for "applies to" or "only for" qualifiers that scope the requirement
 
 Include only changes that affect deployments, procedures, or requirements. If you can't find any substantive changes worth blogging about, create an empty response.
 
@@ -406,7 +484,8 @@ async function main() {
       }
 
       // Call Claude to generate blog content
-      claudeContent = await callClaudeAPI(buildPrompt(fullCommit), githubToken);
+      const prompt = await buildPromptWithFullContext(fullCommit);
+      claudeContent = await callClaudeAPI(prompt, githubToken);
       
       // Check if Claude decided not to generate a blog (empty response)
       const bulletLines = claudeContent.trim().split('\n').filter(line => line.trim().startsWith('-'));

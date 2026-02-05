@@ -232,35 +232,20 @@ function buildPrompt(fullCommit) {
     };
   }).slice(0, 8);
 
-  const changesList = changesWithUrls.map(c => `- **${c.filename}** (${c.url}): ${c.change}`).join('\n');
+  const changesList = changesWithUrls.map(c => {
+    const lines = (c.added || []).concat(c.removed || []);
+    const summary = lines.length > 0 ? `\n      Content: ${lines.join(' | ')}` : '';
+    return `- **${c.filename}** (${c.url}): ${c.change}${summary}`;
+  }).join('\n');
 
-  return `You are an Azure Local infrastructure expert. Analyze these documentation changes and decide if they warrant a blog post for operations teams.
+  return `You are an Azure Local infrastructure expert. Analyze these documentation changes and generate a bulleted list for operations teams.
 
 COMMIT: ${fullCommit.commit.message}
 
-FILES CHANGED WITH DOCUMENTATION LINKS:
+FILES CHANGED:
 ${changesList}
 
-=== QUALITY GATE ===
-REJECT the changes if:
-- Only cosmetic/formatting changes (capitalization, punctuation, wording improvements)
-- No new documents, no procedural changes, no new requirements
-- Changes that don't impact how engineers/architects approach their work
-
-If you reject the changes, respond with ONLY: "SKIP_BLOG"
-
-=== BLOG GENERATION ===
-If the changes are substantive (new docs, significant procedural changes, new requirements, changed best practices), create a bulleted list (5-8 bullets) where EACH bullet is ONE SENTENCE.
-
-For each bullet:
-1. Describe the actual change, new requirement, or new document
-2. Explain what operations/deployment teams need to do differently
-3. Be specific and actionable - reference actual technical details, not cosmetics
-
-Return ONLY the bulleted list, nothing else. Format:
-- One sentence describing the change and its operational impact
-
-Focus on practical, actionable information that affects deployment or operations.`;
+Generate a bulleted list (5-8 bullets) where EACH bullet is ONE SENTENCE describing what changed and why ops teams care. Be specific and actionable. Return ONLY the bulleted list.`;
 }
 
 // Generate blog post object
@@ -372,23 +357,25 @@ async function main() {
       };
       claudeContent = 'Azure Local deployment documentation has been updated to reflect the latest v1.2.3 release. Key changes include improved prerequisite documentation and additional guidance for cluster operators. This update simplifies the deployment experience and reduces common configuration errors.';
     } else {
-      commit = await fetchAzureLocalCommits();
-      if (!commit) {
-        console.log('💤 No commits found, skipping blog generation');
-        process.exit(0);
-      }
+      // Check if testing against a specific commit
+      const testCommitSha = process.env.TEST_COMMIT;
+      
+      if (testCommitSha) {
+        console.log(`🧪 Testing against specific commit: ${testCommitSha}`);
+        fullCommit = await fetchFullCommit(testCommitSha);
+      } else {
+        commit = await fetchAzureLocalCommits();
+        if (!commit) {
+          console.log('💤 No commits found, skipping blog generation');
+          process.exit(0);
+        }
 
-      // Get full commit with diffs
-      fullCommit = await fetchFullCommit(commit.sha);
+        // Get full commit with diffs
+        fullCommit = await fetchFullCommit(commit.sha);
+      }
 
       // Call Claude to generate blog content
       claudeContent = await callClaudeAPI(buildPrompt(fullCommit), githubToken);
-      
-      // Check if Claude rejected the changes as not substantive enough
-      if (claudeContent.trim() === 'SKIP_BLOG') {
-        console.log('⏭️  Claude assessed changes as cosmetic only - skipping blog post');
-        process.exit(0);
-      }
     }
 
     // Create blog post object

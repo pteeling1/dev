@@ -233,23 +233,19 @@ cpuScoreLog.push({
 
   return finalCandidate;
 }
-function selectOptimalCpuForGHz(requiredGHz, totalRAM, totalStorageTiB, haLevel, cpuListOverride = cpuList) {
+function selectOptimalCpuForGHz(requiredGHz, totalRAM, totalStorageTiB, haLevel, cpuListOverride = cpuList, chassisModel = "AX 770") {
   if (requiredGHz <= 0) {
     throw new Error("Required GHz must be greater than 0");
   }
+
+  console.log(`🔍 selectOptimalCpuForGHz called:`);
+  console.log(`   Required GHz: ${requiredGHz}, RAM: ${totalRAM} GB, Storage: ${totalStorageTiB} TiB`);
+  console.log(`   HA Level: ${haLevel}, CPU list size: ${cpuListOverride.length}`);
 
   let bestCandidate = null;
   let bestGoldCandidate = null;
   const goldPreferenceThreshold = 1000;
   const cpuScoreLog = []
-
-// Get the correct CPU list based on chassis model
-function getCpuListForChassis(chassisModel) {
-  if (chassisModel === "AX 670" || chassisModel === "AX 770") {
-    return cpuDataNew;
-  }
-  return cpuDataOld;
-};
 
   for (const cpu of cpuListOverride) {
     const usableCoresPerNode = cpu.cores * 2;
@@ -271,7 +267,10 @@ function getCpuListForChassis(chassisModel) {
     const actualCores = nodesNeeded * usableCoresPerNode;
 
     // Overshoot cap
-    if (actualGHz > requiredGHz * 2.5) continue;
+    if (actualGHz > requiredGHz * 2.5) {
+      console.log(`   ❌ ${cpu.model}: Overshoot cap exceeded (${Math.round(actualGHz)} GHz > ${Math.round(requiredGHz * 2.5)} GHz)`);
+      continue;
+    }
 
     // Memory validation
     const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodesNeeded, haLevel);
@@ -279,12 +278,16 @@ function getCpuListForChassis(chassisModel) {
       ? Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode) + 1
       : Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode);
 
-    if (memoryRequiredNodes > nodesNeeded) continue;
+    if (memoryRequiredNodes > nodesNeeded) {
+      console.log(`   ❌ ${cpu.model}: Memory constraint (needs ${memoryRequiredNodes} nodes, have ${nodesNeeded})`);
+      continue;
+    }
 
     // Disk validation
     try {
         selectDiskConfig(totalStorageTiB, nodesNeeded, chassisModel);
-    } catch {
+    } catch (e) {
+      console.log(`   ❌ ${cpu.model}: Disk validation failed: ${e.message}`);
       continue;
     }
 
@@ -571,6 +574,7 @@ function applyDisconnectedOpsOverhead(payload, disconnectedOpsEnabled) {
     totalCPU: payload.totalCPU + mgmtCores,
     totalRAM: payload.totalRAM + mgmtRAM,
     totalStorage: payload.totalStorage + mgmtStorage,
+    totalGHz: payload.totalGHz || 0, // Explicitly preserve GHz requirement
     disconnectedOps: {
       enabled: true,
       workloadCluster: {
@@ -721,7 +725,7 @@ const mode = activePill?.getAttribute("data-mode") || "vm";
 
   let payload = {
     totalCPU: Math.ceil(applyGrowthFactor(totalCPU, growthPctRaw)),
-    totalGHz: totalGHz, // optional: include if relevant
+    totalGHz: applyGrowthFactor(totalGHz, growthPctRaw),
     totalRAM: Math.ceil(applyGrowthFactor(totalRAM, growthPctRaw)),
     totalStorage: applyGrowthFactor(totalStorage, growthPctRaw), // GB→TB
     growthPct,
@@ -752,7 +756,10 @@ function sizeCluster(req) {
     rackAwareConfig = null  // Optional: '1+1', '2+2', '3+3', '4+4' to constrain sizing
   } = req;
 
-  console.log(`📍 sizeCluster called with rackAwareConfig: ${rackAwareConfig}`);
+  console.log(`📍 sizeCluster called:`);
+  console.log(`   totalCPU: ${totalCPU}, totalGHz: ${totalGHz}`);
+  console.log(`   totalRAM: ${totalRAM} GB, totalStorage: ${totalStorage} TiB`);
+  console.log(`   haLevel: ${haLevel}, rackAwareConfig: ${rackAwareConfig}`);
   
   // Adjust memory requirement to account for max memory utilization constraint
   // If maxMemoryUtilization is 60%, we need to provision for totalRAM / 0.60
@@ -834,9 +841,10 @@ let postFailureCapabilities = null;
   } else {
     // Normal (non-rack-aware) CPU selection
     try {
+      // Prioritize GHz mode if explicitly set
       if (totalGHz > 0) {
         primaryConstraint = "GHz";
-        baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
+        baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       } else if (totalCPU > 0) {
         primaryConstraint = "Cores";
         baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
@@ -1023,7 +1031,7 @@ let postFailureCapabilities = null;
       // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
       const recalcSelection = totalCPU > 0 
         ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization)
-        : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList);
+        : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       
       if (recalcSelection && recalcSelection.cpu) {
         finalSelectedCpu = recalcSelection.cpu;

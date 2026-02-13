@@ -89,10 +89,18 @@
         <i class="bi bi-gear-fill"></i> Advanced
       </a>
 
-      <button id="exportPPTX" class="btn btn-primary mt-3 text-start">
+      <!-- PowerPoint Export with Theme Selector -->
+      <button id="exportPPTX" class="btn btn-primary w-100 text-start">
         <i class="bi bi-file-earmark-ppt"></i> Create PowerPoint
       </button>
-      <button id="aboutBtn" class="btn btn-outline-dark text-start mt-3" onclick="openAboutModal()">
+      <div class="mb-3" style="margin-top: 0.5rem;">
+        <label for="pptxTheme" class="form-label" style="font-size: 0.9rem; margin-bottom: 0.3rem;">PowerPoint Theme</label>
+        <select id="pptxTheme" class="form-select form-select-sm" style="font-size: 0.9rem;">
+          <option value="dark" selected>Dark (Original)</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+      <button id="aboutBtn" class="btn btn-outline-dark text-start mt-3 w-100" onclick="openAboutModal()">
   <i class="bi bi-info-circle"></i> About This Tool
 </button>
       <a href="blogs.html" class="btn text-start mt-2" style="background-color: #0d6efd; color: white; border: none;">
@@ -390,5 +398,3 @@
 </div>
 </body>
 </html>
-< ! - -   A z u r e   L o c a l   2 4 H 2 :   U p d a t e d   F e b   5 ,   2 0 2 6   -   N e w   b a t c h   j o b   p e r m i s s i o n   r e q u i r e m e n t   f o r   u p g r a d e s   - - >  
- 

@@ -14,6 +14,7 @@ import { getSizingPayloadFromHTML, sizeCluster } from './sizingEngine.js';
 import { renderRelativeFillBarChart } from "./barchart.js";
 import {exportToPowerPoint} from './exportToPowerPoint.js';
 import { setupPPTXExport } from "./pptxExporter.js";
+import { setupPPTXExportLight } from "./pptxExporterLight.js";
 import { logger } from './logger.js';
 
 // ✅ Dynamic CPU list selection based on node type
@@ -32,6 +33,18 @@ setupPDFExport();
 window.initializeVisuals = initializeVisuals;
 window.updateNodeStack = updateNodeStack;
 window.drawConnections = drawConnections;
+
+// ✅ PowerPoint theme selector wrapper
+function setupPPTXExportWrapper() {
+  const themeSelector = document.getElementById("pptxTheme");
+  const selectedTheme = themeSelector?.value || "dark";
+  
+  if (selectedTheme === "light") {
+    setupPPTXExportLight({ buttonId: "exportPPTX" });
+  } else {
+    setupPPTXExport({ buttonId: "exportPPTX" });
+  }
+}
 
 // ✅ Enhanced visual refresh function for manual UI changes
 function refreshAllVisuals() {
@@ -605,7 +618,7 @@ if (window.originalRequirements) {
     document.getElementById("relativeFillBarChart").style.display = "block";
     document.getElementById("sizingDetails").classList.remove("d-none");
 
-    setupPPTXExport();
+    setupPPTXExportWrapper();
 
     if (!result) {
       outputContainer.textContent = "No valid configuration found for the given requirements.";
@@ -1178,7 +1191,15 @@ function removeWorkloadRow(btn) {
  setTimeout(() => {
   initializeVisuals();
 }, 50);
-setupPPTXExport();
+setupPPTXExportWrapper();
+
+// ✅ Theme selector listener - reinitialize export button when theme changes
+const themeSelector = document.getElementById("pptxTheme");
+if (themeSelector) {
+  themeSelector.addEventListener("change", () => {
+    setupPPTXExportWrapper();
+  });
+}
 
 });
 

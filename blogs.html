@@ -92,6 +92,38 @@
             font-style: italic;
         }
 
+        /* Navigation Banner */
+        .nav-banner {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 12px 0;
+            margin-bottom: 30px;
+        }
+
+        .nav-banner-content {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .nav-banner-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-american-sapphire);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-banner-item:hover {
+            background: #f9fafb;
+            color: var(--color-dutch-orange);
+        }
+
         /* Blog Index */
         .blog-index {
             background: #ffffff;
@@ -282,6 +314,55 @@
             grid-column: 1 / -1;
         }
 
+        .left-nav {
+            background: #f9fafb;
+            border: 2px solid #1a2332;
+            padding: 20px;
+            margin-bottom: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .left-nav-title {
+            font-family: 'Merriweather', serif;
+            font-size: 14px;
+            font-weight: 900;
+            color: #1a2332;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+        }
+
+        .left-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .left-nav li {
+            margin-bottom: 12px;
+        }
+
+        .left-nav a {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--color-cerulean-blue);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .left-nav a:hover {
+            background: #ffffff;
+            color: var(--color-dutch-orange);
+            border-left: 3px solid var(--color-dutch-orange);
+            padding-left: 9px;
+        }
+
         .sidebar-box {
             background: #f9fafb;
             border: 2px solid #1a2332;
@@ -374,8 +455,17 @@
             }
 
             .columns {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr !important;
                 gap: 20px;
+            }
+
+            .nav-banner-content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .left-nav {
+                position: static;
             }
 
             .main-content {
@@ -411,6 +501,17 @@
             <div class="publication-info">
                 <span class="issue">Volume 1, Issue 1</span>
                 <span>St.Louis, MO</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Banner -->
+    <div class="nav-banner">
+        <div class="container">
+            <div class="nav-banner-content">
+                <a href="index.html" class="nav-banner-item">
+                    <i class="bi bi-calculator-lg"></i> Sizing Tool
+                </a>
             </div>
         </div>
     </div>

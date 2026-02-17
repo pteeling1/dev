@@ -462,6 +462,23 @@
                         
                         <button onclick="showBlog('azure-local', event)" class="read-more" style="background: none; border: none; padding: 0; cursor: pointer; margin-top: 20px;"><span style="color: var(--color-dutch-orange); font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">Read Full Article <i class="bi bi-arrow-right"></i></span></button>
                     </article>
+
+                    <!-- Article 3 -->
+                    <article class="article">
+                        <div class="blog-header-row">
+                            <div class="blog-number">Article 3 of 3</div>
+                            <div class="blog-date">Feb 17, 2026</div>
+                        </div>
+                        <h2 class="article-title">When Azure Local's Reserved IP Ranges Collide With Your Network</h2>
+                        <p class="article-subtitle">A recovery path when your datacenter network overlaps with Microsoft's reserved ranges</p>
+                        <p class="article-byline">By Pieter Teeling • Azure Local Network Design</p>
+                        
+                        <p class="article-text">Microsoft's Azure Local documentation lists two IP ranges that must be preserved for internal AKS Arc and Kubernetes components. If your existing network uses any part of these blocks — and many do — deployment can fail or become unpredictable.</p>
+                        
+                        <p class="article-text">If you're already mid-deployment or can't renumber your network, there's a supported workaround that most customers don't know about.</p>
+                        
+                        <button onclick="showBlog('reserved-ips', event)" class="read-more" style="background: none; border: none; padding: 0; cursor: pointer; margin-top: 20px;"><span style="color: var(--color-dutch-orange); font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">Read Full Article <i class="bi bi-arrow-right"></i></span></button>
+                    </article>
                 </div>
 
                 <!-- Sidebar -->
@@ -1024,6 +1041,155 @@ In practical terms:
 
             <a href="#" class="back-button" onclick="showBlog('index', event)"><i class="bi bi-arrow-left"></i> Back to Articles</a>
         </div>
+
+        <!-- Blog Content: Reserved IP Ranges -->
+        <div class="main-content" id="blog-reserved-ips">
+            <a href="#" class="back-button" onclick="showBlog('index', event)"><i class="bi bi-arrow-left"></i> Back to Articles</a>
+            
+            <div class="content-header">
+                <h1 class="article-title">When Azure Local's Reserved IP Ranges Collide With Your Network</h1>
+                <p class="article-subtitle">A recovery path when your datacenter network overlaps with Microsoft's reserved ranges</p>
+                <p class="article-byline">By Pieter Teeling • Azure Local Network Design</p>
+            </div>
+
+            <div class="columns">
+                <div class="article full-width">
+                    <p class="article-text">Microsoft's documentation for Azure Local includes a strict requirement:</p>
+                    
+                    <p class="article-text"><strong>Two IP ranges must not be used anywhere in your Azure Local deployment:</strong></p>
+                    
+                    <ul class="article-list">
+                        <li><strong>10.96.0.0/12</strong> — Reserved for Kubernetes services</li>
+                        <li><strong>10.244.0.0/16</strong> — Reserved for Kubernetes pod networking</li>
+                    </ul>
+
+                    <p class="article-text">These ranges are reserved for internal Azure Local and AKS Arc components. If your existing datacenter network uses any part of these blocks — and many do — deployment can fail or behave unpredictably.</p>
+
+                    <p class="article-text">This is especially common with 10.244.0.0/16, which appears in many legacy Kubernetes clusters, lab environments, and inherited network designs.</p>
+
+                    <p class="article-text">Microsoft's guidance is simple: <strong>don't use these ranges</strong>.</p>
+
+                    <p class="article-text">But real customer networks are rarely simple.</p>
+
+                    <ul class="article-list">
+                        <li><strong>Sometimes you inherit a network.</strong></li>
+                        <li><strong>Sometimes you're mid‑migration.</strong></li>
+                        <li><strong>Sometimes you discover the overlap only after Azure Local deployment has already begun.</strong></li>
+                    </ul>
+
+                    <p class="article-text">Fortunately, there is a clean, repeatable workaround.</p>
+                </div>
+            </div>
+
+            <div class="section-header">The Workaround: Deploy First, Then Re‑Create the Arc Resource Bridge</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Azure Local enforces reserved‑range validation during deployment. But Arc Resource Bridge (ARB) — the component that hosts AKS on Azure Local — can be safely deleted and re‑created afterward.</p>
+
+                    <p class="article-text">This gives you a path forward:</p>
+
+                    <ol class="article-list">
+                        <li><strong>Deploy Azure Local</strong> using the IPs you want, even if they overlap with Microsoft's reserved ranges.</li>
+                        <li><strong>Delete the automatically created AKS Arc instance.</strong></li>
+                        <li><strong>Re‑create it manually</strong> with your own service CIDR, pod CIDR, and DNS service IP.</li>
+                    </ol>
+
+                    <p class="article-text">This allows you to avoid the reserved ranges and avoid redesigning your entire network.</p>
+                </div>
+            </div>
+
+            <div class="section-header">Step 1 — Delete the Default AKS Arc Instance</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Start by removing the Arc Resource Bridge that was automatically created during Azure Local setup.</p>
+
+                    <p class="article-text">Using PowerShell or the Azure CLI:</p>
+
+                    <pre style="background: #f3f4f6; padding: 1em; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto;">Remove-AksHci -ArcResource -Force</pre>
+
+                    <p class="article-text">Or via Azure CLI for Arc-managed resources. The operation will clean up the associated Kubernetes cluster and all its networking configurations.</p>
+                </div>
+            </div>
+
+            <div class="section-header">Step 2 — Re‑Create AKS Arc With Your Own IP Ranges</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Once removed, you can deploy a new AKS Arc instance with custom networking parameters:</p>
+
+                    <pre style="background: #f3f4f6; padding: 1em; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto;">New-AksHci -Name <your-cluster-name> `
+  -ServiceCidr <your-service-cidr> `
+  -PodCidr <your-pod-cidr> `
+  -DnsServiceIP <your-dns-service-ip></pre>
+
+                    <p class="article-text"><strong>Example with custom ranges:</strong></p>
+
+                    <pre style="background: #f3f4f6; padding: 1em; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto;">New-AksHci -Name azlocal-aks `
+  -ServiceCidr 172.20.0.0/16 `
+  -PodCidr 172.21.0.0/16 `
+  -DnsServiceIP 172.20.0.10</pre>
+
+                    <p class="article-text">Replace the ranges with whatever fits your environment, as long as they don't collide with your existing infrastructure.</p>
+                </div>
+            </div>
+
+            <div class="section-header">Important Notes</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text"><strong>The DNS service IP must always end in .10</strong> — The specific octet is non‑negotiable for AKS Arc.</p>
+
+                    <p class="article-text"><strong>The service CIDR and pod CIDR can be anything</strong> that fits your environment, as long as they don't overlap with the rest of your network.</p>
+
+                    <p class="article-text"><strong>This process modifies only the ARB/AKS layer</strong> — not your Azure Local deployment itself. Your VM hosts, storage, and fabric remain unchanged.</p>
+                </div>
+            </div>
+
+            <div class="section-header">Why This Works</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Azure Local enforces reserved ranges during deployment because ARB and AKS rely on them internally. But once the system is deployed, you can override the Kubernetes networking configuration by re‑creating the AKS Arc instance.</p>
+
+                    <p class="article-text">This gives customers with constrained or inherited networks a viable path forward <strong>without renumbering DNS servers, proxies, gateways, or entire IP blocks.</strong></p>
+
+                    <p class="article-text">It's not documented. It's not obvious. But it's fully supported because you're using standard lifecycle operations.</p>
+                </div>
+            </div>
+
+            <div class="section-header">When This Workaround Makes Sense</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Use this approach when:</p>
+
+                    <ul class="article-list">
+                        <li><strong>Your existing network uses 10.96.0.0/12 or 10.244.0.0/16.</strong></li>
+                        <li><strong>You cannot renumber critical infrastructure.</strong></li>
+                        <li><strong>You want to deploy Azure Local now,</strong> not after a long network redesign.</li>
+                        <li><strong>You need AKS Arc to run with custom service/pod CIDRs.</strong></li>
+                    </ul>
+
+                    <p class="article-text">It's also a great recovery path when the initial deployment fails due to IP conflicts and you want to avoid tearing everything down.</p>
+                </div>
+            </div>
+
+            <div class="section-header">The Bottom Line</div>
+
+            <div class="columns">
+                <div class="article">
+                    <p class="article-text">Azure Local's reserved IP ranges are strict — but they don't have to be blockers.</p>
+
+                    <p class="article-text">By deploying first and re‑creating the Arc Resource Bridge with your own CIDRs, you can run Azure Local in networks that would otherwise be incompatible.</p>
+
+                    <p class="article-text">This is one of those real‑world hybrid‑cloud challenges that customers hit all the time. Now you've got a clean, repeatable way to handle it.</p>
+                </div>
+            </div>
+
+            <a href="#" class="back-button" onclick="showBlog('index', event)"><i class="bi bi-arrow-left"></i> Back to Articles</a>
+        </div>
     </div>
 
     <script>
@@ -1172,6 +1338,7 @@ In practical terms:
             document.getElementById('blogIndex').style.display = 'none';
             document.getElementById('blog-100gbit').classList.remove('active');
             document.getElementById('blog-azure-local').classList.remove('active');
+            document.getElementById('blog-reserved-ips').classList.remove('active');
 
             if (blogId === 'index') {
                 document.getElementById('blogIndex').style.display = 'block';
@@ -1179,6 +1346,8 @@ In practical terms:
                 document.getElementById('blog-100gbit').classList.add('active');
             } else if (blogId === 'azure-local') {
                 document.getElementById('blog-azure-local').classList.add('active');
+            } else if (blogId === 'reserved-ips') {
+                document.getElementById('blog-reserved-ips').classList.add('active');
             }
 
             // Scroll to top

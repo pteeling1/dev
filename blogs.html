@@ -467,9 +467,22 @@
                 <!-- Sidebar -->
                 <div>
                     <div class="sidebar-box">
-                        <h3 class="sidebar-box-title">Market Watch</h3>
+                        <h3 class="sidebar-box-title">Friends</h3>
                         <div class="sidebar-box-content" id="marketWatchContent">
-                            <p style="font-size: 13px; color: #6b7280;">Loading latest cloud news...</p>
+                            <ul style="list-style: none; padding: 0; margin: 0;">
+                                <li style="margin-bottom: 15px;">
+                                    <a href="https://www.linkedin.com/newsletters/azure-local-insider-7094952705042841602" target="_blank" style="color: var(--color-cerulean-blue); text-decoration: none; font-weight: 500; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                        Azure Local Insider <i class="bi bi-box-arrow-up-right" style="font-size: 12px;"></i>
+                                    </a>
+                                    <p style="font-size: 12px; color: #6b7280; margin: 4px 0 0 0;">LinkedIn Newsletter</p>
+                                </li>
+                                <li>
+                                    <a href="https://thisismydemo.cloud/" target="_blank" style="color: var(--color-cerulean-blue); text-decoration: none; font-weight: 500; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                        This Is My Demo <i class="bi bi-box-arrow-up-right" style="font-size: 12px;"></i>
+                                    </a>
+                                    <p style="font-size: 12px; color: #6b7280; margin: 4px 0 0 0;">Community Resource</p>
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -1035,7 +1048,6 @@ In practical terms:
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('DOMContentLoaded fired');
-            fetchMarketWatch();
             
             // Load and display auto posts
             console.log('About to load auto posts...');
@@ -1148,62 +1160,8 @@ In practical terms:
             }
         }
 
-        // Fetch RSS feeds and populate Market Watch
-        async function fetchMarketWatch() {
-            const feeds = [
-                'https://www.cloudcomputing-news.net/feed/',
-                'https://techcommunity.microsoft.com/t5/azure-compute-blog/ct-p/AzureComputeBlog/feed',
-                'https://techcommunity.microsoft.com/t5/azure-arc-blog/ct-p/AzureArcBlog/feed',
-                'https://feeds.feedburner.com/cioreview/fvHK'
-            ];
-
-            const marketWatchContent = document.getElementById('marketWatchContent');
-            const articles = [];
-            const feedArticles = {};
-
-            for (const feed of feeds) {
-                try {
-                    const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed)}`);
-                    const data = await response.json();
-                    
-                    if (data.items) {
-                        feedArticles[feed] = data.items.slice(0, 3);
-                    }
-                } catch (error) {
-                    console.error('Error fetching feed:', feed, error);
-                }
-            }
-
-            // Prioritize CIO Review (exactly 2 articles), then add 2 more from other sources
-            const cioFeed = 'https://feeds.feedburner.com/cioreview/fvHK';
-            const topArticles = [];
-            
-            if (feedArticles[cioFeed]) {
-                topArticles.push(...feedArticles[cioFeed].slice(0, 2));
-            }
-
-            // Add articles from other feeds until we have 4
-            for (const feed of feeds) {
-                if (feed !== cioFeed && feedArticles[feed] && topArticles.length < 4) {
-                    topArticles.push(...feedArticles[feed].slice(0, 4 - topArticles.length));
-                }
-            }
-
-            // Sort all by date
-            topArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
-            if (topArticles.length > 0) {
-                let html = '<ul style="list-style: none; padding: 0; margin: 0;">';
-                topArticles.forEach(article => {
-                    const title = article.title.substring(0, 70) + (article.title.length > 70 ? '...' : '');
-                    html += `<li style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb;"><a href="${article.link}" target="_blank" style="color: #1a2332; text-decoration: none; font-weight: 600; font-size: 12px; line-height: 1.5; display: block;">${title}</a></li>`;
-                });
-                html += '</ul>';
-                marketWatchContent.innerHTML = html;
-            } else {
-                marketWatchContent.innerHTML = '<p style="font-size: 13px; color: #6b7280;">Unable to load news at this time. Please check back later.</p>';
-            }
-        }
+        // Fetch RSS feeds and populate Market Watch - REMOVED in favor of static friend links
+        // Function previously fetched from: cloudcomputing-news, Azure Compute Blog, Azure Arc Blog, CIO Review
 
         function showBlog(blogId, event) {
             if (event) {

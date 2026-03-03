@@ -13,7 +13,9 @@ export function updateNodeImage() {
     "AX 660": "660.png",
     "AX 670": "670.png",
     "AX 760": "760.png",
-    "AX 770": "770.png"
+    "AX 770": "770.png",
+    "AX-4510c": "4510.avif",
+    "AX-4520c": "4520.jpg"
   };
 
   const imageFile = imageMap[nodeType];
@@ -43,7 +45,9 @@ export function updateDiskLimits() {
     "AX 660": [2, 10],
     "AX 670": [2, 16],
     "AX 760": [2, 24],
-    "AX 770": [2, 16]
+    "AX 770": [2, 16],
+    "AX-4510c": [2, 4],
+    "AX-4520c": [6, 12]
   };
 
   const [min, max] = limits[nodeType] || [4, 24];

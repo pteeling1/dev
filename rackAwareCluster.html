@@ -412,6 +412,58 @@
         </table>
       </div>
     </div>
+
+    <!-- Total Bandwidth Required Card -->
+    <div class="form-section" style="margin-top: 40px;">
+      <h5><i class="bi bi-lightning"></i> Total Bandwidth Required</h5>
+      
+      <div class="btn-group mb-3" role="group" style="width: 100%;">
+        <input type="radio" class="btn-check" name="nicSpeed" id="nic25" value="25" checked>
+        <label class="btn btn-outline-primary" for="nic25" style="flex: 1;">25 Gbit Storage NICs</label>
+        
+        <input type="radio" class="btn-check" name="nicSpeed" id="nic100" value="100">
+        <label class="btn btn-outline-primary" for="nic100" style="flex: 1;">100 Gbit Storage NICs</label>
+      </div>
+      
+      <div style="overflow-x: auto;">
+        <table class="table table-sm table-bordered" style="margin-bottom: 0; font-size: 13px;" id="bandwidthTable">
+          <thead style="background: #f0f4f8;">
+            <tr>
+              <th>Configuration</th>
+              <th>Total Nodes</th>
+              <th>Per Zone</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1+1</strong></td>
+              <td>2</td>
+              <td><span class="per-zone" data-25="50" data-100="200">50 Gbit</span></td>
+              <td><span class="total" data-25="100" data-100="400">100 Gbit</span></td>
+            </tr>
+            <tr>
+              <td><strong>2+2</strong></td>
+              <td>4</td>
+              <td><span class="per-zone" data-25="100" data-100="400">100 Gbit</span></td>
+              <td><span class="total" data-25="200" data-100="800">200 Gbit</span></td>
+            </tr>
+            <tr>
+              <td><strong>3+3</strong></td>
+              <td>6</td>
+              <td><span class="per-zone" data-25="150" data-100="600">150 Gbit</span></td>
+              <td><span class="total" data-25="300" data-100="1200">300 Gbit</span></td>
+            </tr>
+            <tr>
+              <td><strong>4+4</strong></td>
+              <td>8</td>
+              <td><span class="per-zone" data-25="200" data-100="800">200 Gbit</span></td>
+              <td><span class="total" data-25="400" data-100="1600">400 Gbit</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     
     <!-- Diagrams Toggle Button -->
     <div style="text-align: center; margin: 30px 0;">
@@ -581,6 +633,27 @@
       if (e.target === imageModal) {
         imageModal.style.display = 'none';
       }
+    });
+    
+    // NIC Speed Toggle for Bandwidth Table
+    const nicSpeedRadios = document.querySelectorAll('input[name="nicSpeed"]');
+    nicSpeedRadios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const speed = e.target.value;
+        const table = document.getElementById('bandwidthTable');
+        const perZoneSpans = table.querySelectorAll('.per-zone');
+        const totalSpans = table.querySelectorAll('.total');
+        
+        perZoneSpans.forEach(span => {
+          const value = span.getAttribute(`data-${speed}`);
+          span.textContent = value + ' Gbit';
+        });
+        
+        totalSpans.forEach(span => {
+          const value = span.getAttribute(`data-${speed}`);
+          span.textContent = value + ' Gbit';
+        });
+      });
     });
     
     // Populate CPU dropdown on page load

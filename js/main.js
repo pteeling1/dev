@@ -7,6 +7,7 @@ import {
   updateStorage
 } from './uihandlers.js';
 import { calculateUsableStorage } from './calculateUsableStorage.js';
+import { getMaxMemoryPerNode, getValidDiskSizes } from './hardwareConfig.js';
 import { drawStorageChart } from './charts.js';
 import { drawConnections, initializeVisuals, updateLegend, updateNodeStack } from './visuals-debug.js';
 import { setupPDFExport } from './pdfexporter.js';
@@ -24,7 +25,21 @@ function getCpuListForNodeType(nodeType) {
   if (nodeType === "AX 670" || nodeType === "AX 770") {
     return cpuDataNew;
   }
+  if (nodeType === "AX-4510c" || nodeType === "AX-4520c") {
+    // Return Ice Lake D CPUs from cpuDataOld (they were just added)
+    return cpuDataOld.filter(cpu => cpu.model.includes("Xeon D-"));
+  }
   return cpuDataOld;
+}
+
+// 🧮 Get socket count based on chassis model
+function getSocketCountForChassis(chassisModel) {
+  // AX-4510c and AX-4520c are single-socket
+  if (chassisModel === "AX-4510c" || chassisModel === "AX-4520c") {
+    return 1;
+  }
+  // All other models are dual-socket
+  return 2;
 }
 
 setupPDFExport();
@@ -218,14 +233,40 @@ const workloadList = document.getElementById("workloadList");
   }
 
   function updateMemoryOptions() {
+    const nodeType = getSelectedNodeType();
+    const maxMemory = getMaxMemoryPerNode(nodeType);
+    
+    // Filter memory options to only show those within the chassis limit
+    const validMemoryOptions = memoryOptions.filter(size => size <= maxMemory);
+    
     memorySelect.innerHTML = "";
-    memoryOptions.forEach(size => {
+    validMemoryOptions.forEach(size => {
       const option = document.createElement("option");
       option.value = size;
       option.textContent = `${size} GB`;
       memorySelect.appendChild(option);
     });
-    memorySelect.value = "512";
+    
+    // Set default value to largest available option or 512
+    const defaultValue = Math.min(512, validMemoryOptions[validMemoryOptions.length - 1] || 512);
+    memorySelect.value = defaultValue;
+  }
+
+  function updateDiskSizeOptions() {
+    const nodeType = getSelectedNodeType();
+    const validDiskSizes = getValidDiskSizes(nodeType);
+    
+    diskSizeSelect.innerHTML = "";
+    validDiskSizes.forEach(size => {
+      const option = document.createElement("option");
+      option.value = size;
+      option.textContent = `${size} TB`;
+      diskSizeSelect.appendChild(option);
+    });
+    
+    // Set default value to 3.84 TB if available, otherwise largest available
+    const defaultValue = validDiskSizes.includes(3.84) ? 3.84 : validDiskSizes[validDiskSizes.length - 1] || 3.84;
+    diskSizeSelect.value = defaultValue;
   }
 
 function renderWorkloadSummary(payload) {
@@ -379,7 +420,8 @@ function renderWorkloadSummary(payload) {
   const cpuModel = cpuSelect.value;
   const cpu = cpuList.find(c => c.model === cpuModel);
 
-  const totalCores = cpu ? cpu.cores * nodes * 2 : "N/A";
+  const socketCount = getSocketCountForChassis(nodeType);
+  const totalCores = cpu ? cpu.cores * nodes * socketCount : "N/A";
   const totalGHzRaw = cpu ? (cpu.base_clock_GHz * totalCores) : 0;
   const totalGHz = Number.isFinite(totalGHzRaw) ? Math.round(totalGHzRaw) : totalGHzRaw;
 const totalUsableCores = totalCores - 4;
@@ -816,7 +858,8 @@ if (!updatedPayload.cpuCount) {
   // Get CPU info for calculations
   cpuList = getCpuListForNodeType(nodeType); // ✅ Update CPU list based on node type
   const cpu = cpuList.find(c => c.model === cpuModel);
-  const currentTotalCores = cpu ? cpu.cores * nodeCount * 2 : 0;
+  const socketCount = getSocketCountForChassis(nodeType);
+  const currentTotalCores = cpu ? cpu.cores * nodeCount * socketCount : 0;
   const currentTotalGHz = cpu ? (cpu.base_clock_GHz * currentTotalCores) : 0;
   const currentUsableCores = Math.max(0, currentTotalCores - 4); // System reserve
 
@@ -854,7 +897,8 @@ if (!updatedPayload.cpuCount) {
   // build a minimal summary so the UI rendering functions can operate.
   if (!result.clusterSummaries || !Array.isArray(result.clusterSummaries)) {
     const cpuCoresPerSocket = cpu?.cores || 0;
-    const physicalCoresPerNode = cpuCoresPerSocket * 2;
+    const socketCount = getSocketCountForChassis(nodeType);
+    const physicalCoresPerNode = cpuCoresPerSocket * socketCount;
     const usableCores = currentUsableCores;
     const usableGHz = currentTotalGHz;
     const usableMemoryGB = currentUsableMemory;
@@ -988,6 +1032,7 @@ nodeTypeRadios.forEach(radio => {
     updateDiskLimits();
     updateCpuOptions();
     updateMemoryOptions();
+    updateDiskSizeOptions();
     updateStorage();
     updateLegend();
     
@@ -1180,6 +1225,7 @@ function removeWorkloadRow(btn) {
   // === Initial Setup ===
   updateCpuOptions();
   updateMemoryOptions();
+  updateDiskSizeOptions();
   updateNodeImage();
   updateDiskLimits();
   updateResiliencyOptionsBasedOnNodes(parseInt(nodeSlider.value, 10));

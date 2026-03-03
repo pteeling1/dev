@@ -4,8 +4,10 @@ import { cpuList as cpuDataNew } from './17GcpuData.js';
 import {
   diskSizesTB,
   getValidDiskCounts,
+  getValidDiskSizes,
   getValidMemoryOptions,
-  sizingConstraints
+  sizingConstraints,
+  getMaxMemoryPerNode
 } from './hardwareConfig.js';
 
 // 🎯 Constants
@@ -15,13 +17,30 @@ const cpuScoreLog = []
 
 // Get the correct CPU list based on chassis model
 function getCpuListForChassis(chassisModel) {
-  if (chassisModel === "AX 670" || chassisModel === "AX 770") {
-    return cpuDataNew;
+  // Merge both CPU lists for full availability
+  const allCpus = [...cpuDataOld, ...cpuDataNew];
+  
+  // Filter CPUs based on chassis compatibility
+  if (chassisModel === "AX-4510c" || chassisModel === "AX-4520c") {
+    // Ice Lake D models support only Xeon D processors
+    return allCpus.filter(cpu => cpu.model.includes("Xeon D"));
   }
-  return cpuDataOld;
+  
+  // Traditional models (AX 660/670/760/770) use Gold/Platinum only
+  return allCpus.filter(cpu => !cpu.model.includes("Xeon D"));
 }
 
-// 🧠 Optimized Scoring Functions
+// � Get socket count based on chassis model
+function getSocketCountForChassis(chassisModel) {
+  // AX-4510c and AX-4520c are single-socket
+  if (chassisModel === "AX-4510c" || chassisModel === "AX-4520c") {
+    return 1;
+  }
+  // All other models are dual-socket
+  return 2;
+}
+
+// �🧠 Optimized Scoring Functions
 
 function calculateCpuEfficiencyScore(cpu, requiredCores, requiredGHz) {
   const physicalCores = cpu.cores;
@@ -79,7 +98,7 @@ function calculateResourceOvershootPenalty(actual, required, weight = 1, maxPena
 
 // 🎯 Optimized CPU Selection
 
-function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLevel, workloadType, cpuListOverride = cpuList, maxCPUUtilization = 0.60, maxMemoryUtilization = 0.60) {
+function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLevel, workloadType, cpuListOverride = cpuList, maxCPUUtilization = 0.60, maxMemoryUtilization = 0.60, chassisModel = "AX 770") {
   if (requiredCores <= 0) throw new Error("Required cores must be greater than 0");
 
   let bestCandidate = null;
@@ -93,7 +112,8 @@ function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLe
 
 
 
-    const usableCoresPerNode = cpu.cores * 2;
+    const socketCount = getSocketCountForChassis(chassisModel);
+    const usableCoresPerNode = cpu.cores * socketCount;
 
     let nodesNeeded = 1;
     while (true) {
@@ -110,7 +130,7 @@ function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLe
       if (nodesNeeded > 512) break;
     }
 
-    const totalPhysicalCores = nodesNeeded * cpu.cores * 2;
+    const totalPhysicalCores = nodesNeeded * cpu.cores * socketCount;
     const totalUsableCores = totalPhysicalCores - SYS_CPU;
     const coreOvershoot = Math.max(0, totalUsableCores - requiredCores);
 
@@ -122,7 +142,7 @@ function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLe
     if (postFailureCores < requiredCores) continue;
 
     // Validate memory
-    const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodesNeeded, haLevel);
+    const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodesNeeded, haLevel, chassisModel);
     const memoryRequiredNodes = haLevel === "n+1"
       ? Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode) + 1
       : Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode);
@@ -144,13 +164,26 @@ const sweetSpot = nodesNeeded >= 4 && nodesNeeded <= 6;
 
     const clockBonus = cpu.base_clock_GHz * -100; // Higher clock speed gets lower (better) score
 
-    const score =
-      totalPhysicalCores * 12 +
-      nodesNeeded * 800 +
-      coreOvershoot * 20 +
-      (nodesNeeded > 7 ? 2500 : 0) +
-      (sweetSpot ? -3000 : 0) +
-      clockBonus;
+    // For N resiliency, PREFER fewer nodes and lower core count
+    // For N+1 resiliency, use standard scoring
+    let score;
+    if (haLevel === 'n') {
+      // N resiliency: minimize nodeCount and coreOvershoot (prefer smaller, single-node configs)
+      score = 
+        nodesNeeded * 5000 +        // Strongly penalize more nodes (5000 per node vs 800)
+        coreOvershoot * 50 +        // Penalize oversizing (50 per extra core vs 20)
+        totalPhysicalCores * 2 +    // Slight penalty for more cores (2 vs 12)
+        clockBonus;
+    } else {
+      // N+1 resiliency: use standard scoring
+      score =
+        totalPhysicalCores * 12 +
+        nodesNeeded * 800 +
+        coreOvershoot * 20 +
+        (nodesNeeded > 7 ? 2500 : 0) +
+        (sweetSpot ? -3000 : 0) +
+        clockBonus;
+    }
 cpuScoreLog.push({
   CPU: cpu.model,
   CoresPerSocket: cpu.cores,
@@ -248,7 +281,8 @@ function selectOptimalCpuForGHz(requiredGHz, totalRAM, totalStorageTiB, haLevel,
   const cpuScoreLog = []
 
   for (const cpu of cpuListOverride) {
-    const usableCoresPerNode = cpu.cores * 2;
+    const socketCount = getSocketCountForChassis(chassisModel);
+    const usableCoresPerNode = cpu.cores * socketCount;
     const usableGHzPerNode = usableCoresPerNode * cpu.base_clock_GHz;
 
     let nodesNeeded = 1;
@@ -267,13 +301,13 @@ function selectOptimalCpuForGHz(requiredGHz, totalRAM, totalStorageTiB, haLevel,
     const actualCores = nodesNeeded * usableCoresPerNode;
 
     // Overshoot cap
-    if (actualGHz > requiredGHz * 2.5) {
-      console.log(`   ❌ ${cpu.model}: Overshoot cap exceeded (${Math.round(actualGHz)} GHz > ${Math.round(requiredGHz * 2.5)} GHz)`);
+    if (actualGHz > requiredGHz * 5) {
+      console.log(`   ❌ ${cpu.model}: Overshoot cap exceeded (${Math.round(actualGHz)} GHz > ${Math.round(requiredGHz * 5)} GHz)`);
       continue;
     }
 
     // Memory validation
-    const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodesNeeded, haLevel);
+    const memoryConfig = selectOptimalMemoryConfig(totalRAM, nodesNeeded, haLevel, chassisModel);
     const memoryRequiredNodes = haLevel === "n+1"
       ? Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode) + 1
       : Math.ceil(totalRAM / memoryConfig.usableMemoryPerNode);
@@ -364,11 +398,19 @@ function selectOptimalCpuForGHz(requiredGHz, totalRAM, totalStorageTiB, haLevel,
 
 // 💾 Optimized Memory Selection
 
-function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
+function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel, chassisModel = "AX 770") {
   const memoryOptions = getValidMemoryOptions();
+  
+  // Get the maximum memory allowed for this specific chassis model
+  const maxMemoryPerNodeAllowed = getMaxMemoryPerNode(chassisModel);
   
   const candidates = memoryOptions.map(option => {
     const usableMemoryPerNode = Math.floor(option.totalGB * (1 - SYS_MEM_RATIO));
+    
+    // 🚨 Enforce chassis memory limit - filter out options exceeding the limit
+    if (option.totalGB > maxMemoryPerNodeAllowed) {
+      return null;
+    }
     
     let effectiveNodes = nodeCount;
     if (haLevel === "n+1") {
@@ -402,7 +444,12 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
       meetsRequirement: memoryShortfall === 0,
       score
     };
-  });
+  }).filter(c => c !== null); // Remove options that exceed chassis limits
+  
+  // Check if any viable options exist after chassis filtering
+  if (candidates.length === 0) {
+    throw new Error(`No memory configuration available for ${chassisModel} model. Maximum supported: ${maxMemoryPerNodeAllowed}GB per node.`);
+  }
   
   // Sort by score and filter for viable options
   // Use totalGB as tie-breaker: prefer smaller configs when scores are equal
@@ -417,6 +464,8 @@ function selectOptimalMemoryConfig(requiredRAM, nodeCount, haLevel) {
   const selectedConfig = viableOptions.length > 0 ? viableOptions[0] : candidates[0];
   
   console.table({
+    "Chassis Model": chassisModel,
+    "Max Memory per Node": `${maxMemoryPerNodeAllowed}GB`,
     "Required RAM": requiredRAM,
     "Node Count": nodeCount,
     "HA Level": haLevel,
@@ -436,11 +485,12 @@ function selectDiskConfig(requiredUsableTiB, nodeCount, chassisModel, overrideRe
   console.log(`🔍 selectDiskConfig: requiredUsableTiB=${requiredUsableTiB}, nodeCount=${nodeCount}, override=${overrideResiliencyLevel}, using=${resiliencyLevel}`);
   const allowSmallFootprint = requiredUsableTiB < 10; // Allow smaller drive counts for sub-10TiB requirements
 
-  
+  // Get valid disk sizes for this chassis model (filters based on physical constraints)
+  const validDiskSizes = getValidDiskSizes(chassisModel);
 
   const candidates = [];
 
-  diskSizesTB.forEach(size => {
+  validDiskSizes.forEach(size => {
     // getValidDiskCounts expects a chassis model to enforce per-chassis disk limits
     const validCounts = getValidDiskCounts(chassisModel);
     validCounts.forEach(count => {
@@ -813,9 +863,10 @@ let postFailureCapabilities = null;
       
       console.log(`   Need ${cpuCoresNeeded} total cores with ${rackAwareSizingNodeCount} nodes = ${coresPerNode.toFixed(1)} per node`);
       
-      // Find CPUs where (cores * 2 threads/core * postFailureNodeCount) >= cpuCoresNeeded
+      // Find CPUs where (cores * socketCount * postFailureNodeCount) >= cpuCoresNeeded
+      const socketCount = getSocketCountForChassis(req.chassisModel);
       const viableCpus = filteredCpuList.filter(cpu => {
-        const totalCoresAvailable = cpu.cores * 2 * rackAwareSizingNodeCount;
+        const totalCoresAvailable = cpu.cores * socketCount * rackAwareSizingNodeCount;
         const fits = totalCoresAvailable >= cpuCoresNeeded;
         if (fits) {
           console.log(`   ✓ ${cpu.model} (${cpu.cores}c) provides ${totalCoresAvailable} cores`);
@@ -833,7 +884,8 @@ let postFailureCapabilities = null;
         // Prefer lower core count for cost efficiency, but must meet requirement
         const bestCpu = viableCpus[0]; // viableCpus should be sorted by core count
         baseCpuSelection = { cpu: bestCpu, nodesNeeded: rackAwareSizingNodeCount };
-        console.log(`✓ Selected CPU for rack-aware ${rackAwareConfig}: ${bestCpu.model} (${bestCpu.cores} cores) - provides ${bestCpu.cores * 2 * rackAwareSizingNodeCount} total cores`);
+        const socketCount = getSocketCountForChassis(req.chassisModel);
+        console.log(`✓ Selected CPU for rack-aware ${rackAwareConfig}: ${bestCpu.model} (${bestCpu.cores} cores) - provides ${bestCpu.cores * socketCount * rackAwareSizingNodeCount} total cores`);
       }
     } catch (err) {
       console.warn(`⚠️ Rack-aware CPU selection failed: ${err.message}`);
@@ -847,7 +899,7 @@ let postFailureCapabilities = null;
         baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       } else if (totalCPU > 0) {
         primaryConstraint = "Cores";
-        baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
+        baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel);
       } else {
         throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
       }
@@ -855,7 +907,7 @@ let postFailureCapabilities = null;
       console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
       console.warn("🔁 Falling back to 8-core sizing attempt…");
       try {
-        baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization);
+        baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel);
         primaryConstraint = "Fallback (8 cores)";
       } catch (fallbackErr) {
         throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
@@ -870,7 +922,8 @@ let postFailureCapabilities = null;
   // PARALLEL CONSTRAINT CALCULATION
   // Calculate independent node requirements for each constraint
   const baseCpu = baseCpuSelection.cpu;
-  const baseCoresPerNode = baseCpu.cores * 2;
+  const socketCount = getSocketCountForChassis(req.chassisModel);
+  const baseCoresPerNode = baseCpu.cores * socketCount;
   
   // 1. CPU constraint: nodes needed to meet CPU requirement
   const cpuNodesNeeded = baseCpuSelection.nodesNeeded || 
@@ -880,7 +933,7 @@ let postFailureCapabilities = null;
   // Memory requirement already adjusted upfront, so calculate nodes for adjusted amount
   // For rack-aware, use the post-failure node count; otherwise use a reasonable estimate
   const memoryCalcNodeCount = rackAwareSizingNodeCount || 3;
-  let tempMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, memoryCalcNodeCount, haLevel);
+  let tempMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, memoryCalcNodeCount, haLevel, chassisModel);
   const usableMemoryPerNode = tempMemoryConfig.usableMemoryPerNode;
   
   // Calculate nodes needed for the adjusted memory amount
@@ -891,18 +944,19 @@ let postFailureCapabilities = null;
   // 3. For rack-aware, use the total cluster node count; otherwise use max of constraints
   let nodeCount = rackAwareNodeCount !== null ? rackAwareNodeCount : Math.max(cpuNodesNeeded, memoryNodesNeeded);
 
-  // Ensure minimum cluster size (only for non-rack-aware)
+  // Ensure minimum cluster size (only for non-rack-aware, non-N-resiliency)
+  // N resiliency (single node) should not be forced to minimum HA size
   const minNodes = sizingConstraints.minClusterSize || 3;
-  if (!rackAwareNodeCount && nodeCount < minNodes) {
+  if (!rackAwareNodeCount && haLevel !== 'n' && nodeCount < minNodes) {
     nodeCount = minNodes;
   }
 
   let selectedCpu = baseCpu;
-  const physicalCoresPerNode = selectedCpu.cores * 2;
+  const physicalCoresPerNode = selectedCpu.cores * socketCount;
   const usableCoresPerNode = physicalCoresPerNode;
   
   // Use memory config appropriate for the final node count
-  let memoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, nodeCount, haLevel);
+  let memoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, nodeCount, haLevel, chassisModel);
 
   // Step 2: Storage loop - find minimum nodes needed for storage constraint
   // This may increase nodeCount beyond CPU/Memory requirements
@@ -928,10 +982,12 @@ let postFailureCapabilities = null;
       const clusterSummaries = clusters.map((size, index) => {
         // For single-cluster sizing (most common), use diskConfig.usableTiB directly
         // For multi-cluster splitting, recalculate proportionally
-        let usableTiB;
+        let usableTiB = 0;
         if (clusters.length === 1) {
           // Single cluster - use the exact calculation from selectDiskConfig()
+          console.log(`DEBUG: diskConfig before assignment:`, diskConfig);
           usableTiB = diskConfig.usableTiB;
+          console.log(`DEBUG: assigned usableTiB = ${usableTiB}`);
         } else {
           // Multiple clusters - proportional allocation
           const reservedNodes = Math.min(size, 4);
@@ -958,7 +1014,8 @@ let postFailureCapabilities = null;
         const postFailureNodes = Math.max(size - 1, 1);
         const postFailureCores = postFailureNodes * usableCoresPerNode - SYS_CPU;
         const postFailureGHz = postFailureCores * selectedCpu.base_clock_GHz;
-        if (totalGHz > 0 && postFailureGHz > totalGHz * 1.5) return null;
+        // Don't reject valid configurations - only proceed if post-failure can still meet requirements
+        if (totalGHz > 0 && postFailureGHz < totalGHz) return null;
         const postFailureRAM = postFailureNodes * memoryConfig.usableMemoryPerNode;
 
         return {
@@ -1020,7 +1077,7 @@ let postFailureCapabilities = null;
   console.log(`📊 Node requirements - CPU: ${cpuNodesNeeded}, Memory: ${memoryNodesNeeded}, Storage: ${storageNodesNeeded}, Final: ${finalNodeCount}`);
 
   // Recalculate memory configuration for the final node count
-  const finalMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, finalNodeCount, haLevel);
+  const finalMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, finalNodeCount, haLevel, chassisModel);
 
   // Recalculate CPU selection for the final node count
   // With more nodes available, we might be able to select a lower-core CPU while still meeting requirements
@@ -1030,7 +1087,7 @@ let postFailureCapabilities = null;
     if (!rackAwareConfig) {
       // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
       const recalcSelection = totalCPU > 0 
-        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization)
+        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel)
         : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       
       if (recalcSelection && recalcSelection.cpu) {
@@ -1044,7 +1101,7 @@ let postFailureCapabilities = null;
     console.warn("⚠️ CPU recalculation for final node count failed, keeping original CPU selection");
   }
 
-  const finalPhysicalCoresPerNode = finalSelectedCpu.cores * 2;
+  const finalPhysicalCoresPerNode = finalSelectedCpu.cores * socketCount;
   const finalUsableCoresPerNode = finalPhysicalCoresPerNode;
 const totalUsableCores = finalNodeCount * finalUsableCoresPerNode - finalClusters.length * SYS_CPU;
 const totalUsableGHz = totalUsableCores * finalSelectedCpu.base_clock_GHz;

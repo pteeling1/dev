@@ -165,5 +165,34 @@ export const cpuList = [
     memory_type: "DDR5-5600",
     memory_speed: 5600,
     spec_rate_base: 1070
+  },
+
+  // --- Ice Lake D (3rd Gen) ---
+  {
+    model: "Intel Xeon D-2718NT",
+    base_clock_GHz: 2.6,
+    cores: 8,
+    threads: 16,
+    memory_type: "DDR5-3200",
+    memory_speed: 3200,
+    spec_rate_base: 172
+  },
+  {
+    model: "Intel Xeon D-2748NTE",
+    base_clock_GHz: 2.9,
+    cores: 16,
+    threads: 32,
+    memory_type: "DDR5-3200",
+    memory_speed: 3200,
+    spec_rate_base: 339
+  },
+  {
+    model: "Intel Xeon D-2788CX",
+    base_clock_GHz: 2.1,
+    cores: 20,
+    threads: 40,
+    memory_type: "DDR5-3200",
+    memory_speed: 3200,
+    spec_rate_base: 339
   }
 ];

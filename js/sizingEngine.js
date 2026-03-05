@@ -1096,12 +1096,27 @@ let postFailureCapabilities = null;
     if (!rackAwareConfig) {
       // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
       const recalcSelection = totalCPU > 0 
-        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel)
+        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot)
         : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       
       if (recalcSelection && recalcSelection.cpu) {
-        finalSelectedCpu = recalcSelection.cpu;
-        console.log(`🔄 CPU recalculated for final ${finalNodeCount} nodes: ${finalSelectedCpu.model} (${finalSelectedCpu.cores} cores, ${finalSelectedCpu.base_clock_GHz} GHz)`);
+        // CRITICAL: Validate that the recalculated CPU can work with finalNodeCount nodes
+        // Check post-failure survivability for this CPU with finalNodeCount
+        const recalcSocketCount = getSocketCountForChassis(chassisModel);
+        const recalcCoresPerNode = recalcSelection.cpu.cores * recalcSocketCount;
+        const postFailureCoresWithFinal = haLevel === "n+1"
+          ? (finalNodeCount - 1) * recalcCoresPerNode - SYS_CPU
+          : finalNodeCount * recalcCoresPerNode - SYS_CPU;
+        
+        // The recalculated CPU must provide enough cores for the final node count in N+1 scenario
+        if (postFailureCoresWithFinal >= totalCPU) {
+          // Recalculated CPU is compatible with finalNodeCount - use it
+          finalSelectedCpu = recalcSelection.cpu;
+          console.log(`🔄 CPU recalculated for final ${finalNodeCount} nodes: ${finalSelectedCpu.model} (${finalSelectedCpu.cores} cores, ${finalSelectedCpu.base_clock_GHz} GHz)`);
+        } else {
+          // Recalculated CPU doesn't have enough post-failure cores for finalNodeCount - reject it
+          console.warn(`⚠️ CPU recalculation (${recalcSelection.cpu.model}) provides ${postFailureCoresWithFinal} post-failure cores, but need ${totalCPU} - keeping original CPU ${selectedCpu.model}`);
+        }
       }
     } else {
       console.log(`✓ Rack-aware mode: keeping selected CPU ${selectedCpu.model} for ${rackAwareConfig} configuration`);

@@ -638,31 +638,72 @@ console.log("🔍 Avg CPU Usage:", avgCpuUsage);
 console.log("🔍 vCPU/Core Ratio:", vcpuCoreRatio);
 console.log("🔍 Adjusted vCPU Demand:", adjustedVcpuDemand);
 console.groupEnd();
-      const payload = {
-        totalCPU: finalCPU,
-        totalRAM: Math.ceil(totalRAM * (1 + growthPct / 100)),
-        totalStorage: totalDisk * (1 + growthPct / 100),
-        haLevel,
-        growthPct: growthPct / 100,
-        chassisModel: "AX 760"
-      };
+
+      // Calculate adjusted RAM and storage for payload
+      const adjustedTotalRAM = Math.ceil(totalRAM * (1 + growthPct / 100));
+      const adjustedTotalStorage = totalDisk * (1 + growthPct / 100);
 
       const forcedCpuModel = document.getElementById("cpuOverrideSelect")?.value;
-if (forcedCpuModel) {
-  payload.cpuModel = forcedCpuModel;
-}
-      const result = sizeCluster(payload);
+
+      // Try multiple chassis and pick the one with minimum nodes (batch sizing preference)
+      const chassisModelsToTry = vms.length <= 10 
+        ? ['AX-4510c', 'AX 760', 'AX 770']  // Small clusters: try edge first
+        : ['AX 760', 'AX 770'];              // Larger clusters: datacenter chassis only
+
+      let result = null;
+      let sizingAttempts = [];
+
+      for (const chassis of chassisModelsToTry) {
+        try {
+          const testPayload = {
+            totalCPU: finalCPU,
+            totalRAM: adjustedTotalRAM,
+            totalStorage: adjustedTotalStorage,
+            haLevel,
+            growthPct: growthPct / 100,
+            chassisModel: chassis,
+            disableSweetSpot: true  // Batch sizing: minimize node count
+          };
+
+          if (forcedCpuModel) {
+            testPayload.cpuModel = forcedCpuModel;
+          }
+
+          const testResult = sizeCluster(testPayload);
+          console.log(`   ✓ ${chassis}: ${testResult.nodeCount} nodes`);
+          sizingAttempts.push(testResult);
+        } catch (err) {
+          console.warn(`   ⚠️ ${chassis} failed: ${err.message}`);
+        }
+      }
+
+      if (sizingAttempts.length === 0) {
+        throw new Error(`Failed to size cluster with any chassis model`);
+      }
+
+      // Select the configuration with minimum nodes (batch sizing preference)
+      sizingAttempts.sort((a, b) => {
+        // Primary: fewer nodes
+        if (a.nodeCount !== b.nodeCount) return a.nodeCount - b.nodeCount;
+        // Tiebreaker: prefer AX-4510c > AX-760 > AX-770
+        const order = { 'AX-4510c': 0, 'AX 760': 1, 'AX 770': 2 };
+        return (order[a.chassisModel] || 99) - (order[b.chassisModel] || 99);
+      });
+
+      result = sizingAttempts[0];
+      console.log(`   ✅ Selected: ${result.chassisModel} with ${result.nodeCount} nodes (batch preference)`);
+
 
       sizingResults.push({
         clusterName: `${site} / ${group.name}`,
         vmCount: vms.length,
         totalVcpu,
-        totalRamGB: payload.totalRAM,
-        totalDiskTiB: payload.totalStorage,
+        totalRamGB: adjustedTotalRAM,
+        totalDiskTiB: adjustedTotalStorage,
         hostCount,
         avgCpuUsage,
         vcpuCoreRatio,
-        totalCPU: payload.totalCPU,
+        totalCPU: finalCPU,
         recommendedNodes: result.nodeCount,
         ...result
       });
@@ -675,12 +716,12 @@ if (forcedCpuModel) {
           <ul>
             <li>VMs: ${vms.length}</li>
             <li>Total vCPU: ${totalVcpu}</li>
-            <li>Total RAM: ${payload.totalRAM} GB</li>
-            <li>Total Disk: ${payload.totalStorage.toFixed(1)} TiB</li>
+            <li>Total RAM: ${adjustedTotalRAM} GB</li>
+            <li>Total Disk: ${adjustedTotalStorage.toFixed(1)} TiB</li>
             <li>Hosts: ${hostCount}</li>
             <li>Avg CPU Usage: ${avgCpuUsage.toFixed(1)}%</li>
             <li>vCPU/Core Ratio: ${vcpuCoreRatio.toFixed(2)}</li>
-            <li>Estimated Physical CPU: ${payload.totalCPU}</li>
+            <li>Estimated Physical CPU: ${finalCPU}</li>
           </ul>
 
           <h5>⚙️ Recommended Configuration</h5>

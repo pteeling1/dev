@@ -86,16 +86,15 @@ function processSheetData(rows, sheetName) {
       const vmCount = parseInt(findColumn(row, 'VM Count', 'VMs', 'VM_Count') || 0) || 0;
       const customerNodes = parseInt(findColumn(row, 'Nodes', 'Node Count') || 1) || 1;
       const inUseVCPU = parseInt(findColumn(row, 'In Use vCPU', 'In the vCPU', 'In the CPU', 'vCPU', 'Cores') || 0) || 0;
-      const p2vRatio = parseFloat(findColumn(row, 'P2V Core Ratio', 'P2V Ratio', 'Core Ratio') || 1) || 1;
       const inTheRamGB = parseInt(findColumn(row, 'In Use RAM (GB)', 'In the RAM (GB)', 'In the RAM', 'RAM', 'RAM (GB)') || 0) || 0;
       const inTheDiskTB = parseFloat(findColumn(row, 'In Use Disk (TB)', 'In the Disk (TB)', 'In the Disk', 'Disk', 'Storage', 'Disk (TB)') || 0) || 0;
       
-      // Calculate physical cores from vCPU and P2V ratio
-      // P2V ratio = vCPU per physical core, so divide vCPU by ratio to get physical cores
-      const inTheCpuCores = Math.round(inUseVCPU / p2vRatio);
+      // Calculate physical cores from vCPU using standard 2.5:1 P2V ratio
+      // Standard assumption: vCPU per physical core = 2.5
+      const inTheCpuCores = Math.round(inUseVCPU / 2.5);
       
       // Debug: log what we extracted
-      console.log(`   → ${clusterName}: VMs=${vmCount}, nodes=${customerNodes}, vCPU=${inUseVCPU}, P2V=${p2vRatio}, Physical Cores=${inTheCpuCores}, ram=${inTheRamGB}GB, disk=${inTheDiskTB}TB`);
+      console.log(`   → ${clusterName}: VMs=${vmCount}, nodes=${customerNodes}, vCPU=${inUseVCPU}, Physical Cores=${inTheCpuCores}, ram=${inTheRamGB}GB, disk=${inTheDiskTB}TB`);
       
       // Skip if no requirements specified
       if (inTheCpuCores === 0 && inTheRamGB === 0 && inTheDiskTB === 0) {
@@ -123,7 +122,8 @@ function processSheetData(rows, sheetName) {
         growthPct: 0,
         haLevel: haLevel,
         chassisModel: chassisModel,
-        disableSweetSpot: true  // Batch sizing: minimize node count, disable sweet spot bonus
+        disableSweetSpot: true,  // Batch sizing: minimize node count, disable sweet spot bonus
+        batchMode: true  // Batch sizing: heavily prefer fewer nodes
       };
       
       // Run sizing engine with chassis fallback: AX-4510c → AX-760 → AX-770
@@ -164,7 +164,7 @@ function processSheetData(rows, sheetName) {
           vmCount,
           customerNodes,
           vCPU: inUseVCPU,
-          p2vRatio: p2vRatio,
+          p2vRatio: 2.5,
           cores: inTheCpuCores,
           ramGB: inTheRamGB,
           storageTB: inTheDiskTB
@@ -260,7 +260,7 @@ export function exportBatchResultsToExcel(allResults, filename = 'sizing-results
           input.vmCount || '',
           input.customerNodes || '',
           input.vCPU || '',
-          input.p2vRatio || '',
+          input.p2vRatio || '2.5',
           input.cores || '',
           input.ramGB || '',
           input.storageTB || '',

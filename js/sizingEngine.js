@@ -98,7 +98,7 @@ function calculateResourceOvershootPenalty(actual, required, weight = 1, maxPena
 
 // 🎯 Optimized CPU Selection
 
-function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLevel, workloadType, cpuListOverride = cpuList, maxCPUUtilization = 0.60, maxMemoryUtilization = 0.60, chassisModel = "AX 770", disableSweetSpot = false) {
+function selectOptimalCpuForCores(requiredCores, totalRAM, totalStorageTiB, haLevel, workloadType, cpuListOverride = cpuList, maxCPUUtilization = 0.60, maxMemoryUtilization = 0.60, chassisModel = "AX 770", disableSweetSpot = false, batchMode = false) {
   if (requiredCores <= 0) throw new Error("Required cores must be greater than 0");
 
   cpuScoreLog.length = 0;  // Clear the log at start of each selection
@@ -181,7 +181,13 @@ const sweetSpot = nodesNeeded >= 3 && nodesNeeded <= 5;
       // For edge-location chassis (AX-4510c/AX-4520c), favor fewer nodes over sweet spot
       // These small chassis are designed for edge deployments and should minimize node count
       const isEdgeChassisModel = (model) => model === 'AX-4510c' || model === 'AX-4520c';
-      const nodePenalty = isEdgeChassisModel(chassisModel) ? 300 : 800;
+      const basePenalty = isEdgeChassisModel(chassisModel) ? 300 : 800;
+      // In batch mode, heavily penalize more nodes (prefer fewer larger-core options)
+      const nodePenalty = batchMode ? basePenalty * 2 : basePenalty;
+      if (cpuScoreLog.length === 0 && !cpuScoreLog.batchModeWarning) {
+        console.log(`    💡 Scoring mode: batchMode=${batchMode}, nodePenalty=${nodePenalty} (base=${basePenalty})`);
+        cpuScoreLog.batchModeWarning = true;
+      }
       const enableSweetSpot = !isEdgeChassisModel(chassisModel) && !disableSweetSpot;  // Disable sweet spot for edge chassis or batch mode
       
       score =
@@ -812,7 +818,8 @@ function sizeCluster(req) {
     maxCPUUtilization = 0.60,
     maxMemoryUtilization = 0.60,
     rackAwareConfig = null,  // Optional: '1+1', '2+2', '3+3', '4+4' to constrain sizing
-    disableSweetSpot = false  // For batch sizing: disable sweet spot bonus
+    disableSweetSpot = false,  // For batch sizing: disable sweet spot bonus
+    batchMode = false  // For batch sizing: heavily prefer fewer nodes over core count
   } = req;
 
   console.log(`📍 sizeCluster called:`);
@@ -908,7 +915,7 @@ let postFailureCapabilities = null;
         baseCpuSelection = selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       } else if (totalCPU > 0) {
         primaryConstraint = "Cores";
-        baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot);
+        baseCpuSelection = selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot, batchMode);
       } else {
         throw new Error("Must specify either totalCPU (cores) or totalGHz requirement");
       }
@@ -916,7 +923,7 @@ let postFailureCapabilities = null;
       console.warn(`⚠️ Primary CPU selection failed: ${err.message}`);
       console.warn("🔁 Falling back to 8-core sizing attempt…");
       try {
-        baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot);
+        baseCpuSelection = selectOptimalCpuForCores(8, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot, batchMode);
         primaryConstraint = "Fallback (8 cores)";
       } catch (fallbackErr) {
         throw new Error(`❌ Fallback sizing also failed: ${fallbackErr.message}`);
@@ -939,9 +946,8 @@ let postFailureCapabilities = null;
     Math.ceil((totalCPU + SYS_CPU) / baseCoresPerNode);
 
   // 2. Memory constraint: nodes needed to meet memory requirement with utilization limit
-  // Memory requirement already adjusted upfront, so calculate nodes for adjusted amount
-  // For rack-aware, use the post-failure node count; otherwise use a reasonable estimate
-  const memoryCalcNodeCount = rackAwareSizingNodeCount || 3;
+  // Start from CPU node count, not hardcoded 3, so memory adapts to CPU decision
+  const memoryCalcNodeCount = rackAwareSizingNodeCount || cpuNodesNeeded;
   let tempMemoryConfig = selectOptimalMemoryConfig(adjustedTotalRAM, memoryCalcNodeCount, haLevel, chassisModel);
   const usableMemoryPerNode = tempMemoryConfig.usableMemoryPerNode;
   
@@ -1096,7 +1102,7 @@ let postFailureCapabilities = null;
     if (!rackAwareConfig) {
       // Use the full CPU selection algorithm to pick the optimal CPU for the final node count
       const recalcSelection = totalCPU > 0 
-        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot)
+        ? selectOptimalCpuForCores(totalCPU, adjustedTotalRAM, totalStorage, haLevel, null, filteredCpuList, maxCPUUtilization, maxMemoryUtilization, chassisModel, disableSweetSpot, batchMode)
         : selectOptimalCpuForGHz(totalGHz, adjustedTotalRAM, totalStorage, haLevel, filteredCpuList, chassisModel);
       
       if (recalcSelection && recalcSelection.cpu) {

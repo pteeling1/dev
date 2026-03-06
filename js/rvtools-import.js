@@ -646,9 +646,8 @@ console.groupEnd();
       const forcedCpuModel = document.getElementById("cpuOverrideSelect")?.value;
 
       // Try multiple chassis and pick the one with minimum nodes (batch sizing preference)
-      const chassisModelsToTry = vms.length <= 10 
-        ? ['AX-4510c', 'AX 760', 'AX 770']  // Small clusters: try edge first
-        : ['AX 760', 'AX 770'];              // Larger clusters: datacenter chassis only
+      // Always try all chassis: let sizing engine decide what's viable
+      const chassisModelsToTry = ['AX-4510c', 'AX 760', 'AX 770'];
 
       let result = null;
       let sizingAttempts = [];

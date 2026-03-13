@@ -177,17 +177,6 @@ The AX Calculator is a **static, client-side web app** for:
 
 This ensures dev is the single source of truth during development, and prod/web remain stable until deliberate sync.
 
-### Local Setup
-```bash
-# Start a local HTTP server (required for ES modules)
-python -m http.server 8000
-# or
-npx http-server -p 8080
-# or use VS Code Live Server extension
-```
-
-Open `http://localhost:8000/` (or configured port)
-
 ### Making Changes
 1. Edit files in `dev/` folder
 2. Refresh browser — changes are immediate (no build step)

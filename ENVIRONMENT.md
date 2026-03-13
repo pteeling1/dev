@@ -167,6 +167,17 @@ The AX Calculator is a **static, client-side web app** for:
 
 ## Development Workflow
 
+### ⚠️ CRITICAL WORKFLOW RULE
+
+**All changes must be made locally in the `dev/` folder by default.**
+
+- **No automatic GitHub pushes** — changes are committed locally; push only when explicitly instructed
+- **No automatic copying to prod** — prod remains untouched unless specifically told to sync
+- **No automatic creation in prod** — files/changes are created only in dev unless instructed otherwise
+- **Explicit instructions required** — to push, copy to prod, or deploy, the user must explicitly request it
+
+This ensures dev is the single source of truth during development, and prod/web remain stable until deliberate sync.
+
 ### Local Setup
 ```bash
 # Start a local HTTP server (required for ES modules)

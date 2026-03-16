@@ -472,11 +472,11 @@
                 <div class="article">
                     <p class="article-text">Start by removing the Arc Resource Bridge that was automatically created during Azure Local setup.</p>
 
-                    <p class="article-text">Using PowerShell or the Azure CLI:</p>
+                    <p class="article-text">Using the Azure CLI:</p>
 
-                    <pre>Remove-AksHci -ArcResource -Force</pre>
+                    <pre>az aksarc delete --name &lt;cluster-name&gt; --resource-group &lt;resource-group&gt; --yes --no-wait</pre>
 
-                    <p class="article-text">Or via Azure CLI for Arc-managed resources. The operation will clean up the associated Kubernetes cluster and all its networking configurations.</p>
+                    <p class="article-text">This operation will clean up the associated Kubernetes cluster and all its networking configurations.</p>
                 </div>
             </div>
 
@@ -486,17 +486,25 @@
                 <div class="article">
                     <p class="article-text">Once removed, you can deploy a new AKS Arc instance with custom networking parameters:</p>
 
-                    <pre>New-AksHci -Name &lt;your-cluster-name&gt; `
-  -ServiceCidr &lt;your-service-cidr&gt; `
-  -PodCidr &lt;your-pod-cidr&gt; `
-  -DnsServiceIP &lt;your-dns-service-ip&gt;</pre>
+                    <pre>az aksarc create \
+    --resource-group &lt;resource-group&gt; \
+    --name &lt;cluster-name&gt; \
+    --custom-location &lt;custom-location&gt; \
+    --vnet-ids &lt;logical-network-id&gt; \
+    --service-cidr &lt;your-service-cidr&gt; \
+    --dns-service-ip &lt;your-dns-service-ip&gt; \
+    --pod-cidr &lt;your-pod-cidr&gt;</pre>
 
                     <p class="article-text"><strong>Example with custom ranges:</strong></p>
 
-                    <pre>New-AksHci -Name azlocal-aks `
-  -ServiceCidr 172.20.0.0/16 `
-  -PodCidr 172.21.0.0/16 `
-  -DnsServiceIP 172.20.0.10</pre>
+                    <pre>az aksarc create \
+    --resource-group myResourceGroup \
+    --name myAKSCluster \
+    --custom-location myCustomLocation \
+    --vnet-ids myLogicalNetworkId \
+    --service-cidr 172.20.0.0/16 \
+    --dns-service-ip 172.20.0.10 \
+    --pod-cidr 10.244.0.0/16</pre>
 
                     <p class="article-text">Replace the ranges with whatever fits your environment, as long as they don't collide with your existing infrastructure.</p>
                 </div>

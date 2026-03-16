@@ -153,6 +153,23 @@
         </select>
       </div>
     </div>
+    <div class="row g-3 mt-2">
+      <div class="col-md-12">
+        <label class="form-label">Storage Calculation Method</label>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="storageMethod" id="storageProvisioned" value="provisioned" checked>
+          <label class="form-check-label" for="storageProvisioned">
+            Size for provisioned storage (In Use MiB from vInfo)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="storageMethod" id="storageConsumed" value="consumed">
+          <label class="form-check-label" for="storageConsumed">
+            Size for guest OS consumed storage (ConsumedMiB from vPartition)
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 
  <!-- Preview + Sizing Results side by side -->

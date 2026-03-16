@@ -158,9 +158,10 @@ function buildGroupsForMode() {
 }
 
 
-function normalizeVMRow(vm, memoryMap = {}) {
+function normalizeVMRow(vm, memoryMap = {}, consumedStorageMap = {}) {
   const name = vm["VM"]?.trim() || 'Unnamed VM';
   const activeMB = memoryMap[name];
+  const consumedMiB = consumedStorageMap[name];
 
   return {
     VMName: name,
@@ -170,7 +171,8 @@ function normalizeVMRow(vm, memoryMap = {}) {
     MemoryGB: activeMB
       ? activeMB / 1024
       : parseFloat(vm["Memory"]) / 1024 || 0,
-    UsedSpaceGB: parseFloat(vm["In Use MiB"]) / 1024 || 0,
+    ProvisionedSpaceGB: parseFloat(vm["In Use MiB"]) / 1024 || 0,  // Provisioned (In Use MiB from vInfo)
+    ConsumedSpaceGB: consumedMiB ? consumedMiB / 1024 : 0,           // Guest OS consumed (ConsumedMiB from vPartition)
 
     // 👇 Map the verbose RVTools column to a clean property
     GuestOS: vm["OS according to the configuration file"]?.trim() || 'Unknown',
@@ -256,10 +258,23 @@ function handleFileUpload(event) {
         }
       });
 
+      // vPartition for consumed storage (guest OS level)
+      const vPartitionSheet = workbook.Sheets["vPartition"];
+      const rawPartitionData = vPartitionSheet ? XLSX.utils.sheet_to_json(vPartitionSheet) : [];
+      const vmConsumedStorageMap = {};
+      rawPartitionData.forEach(row => {
+        const vmName = row["VM"]?.trim();
+        const consumedMiB = parseFloat(row["Consumed MiB"]);
+        if (vmName && !isNaN(consumedMiB)) {
+          // Sum consumed storage per VM (in case of multiple partitions per VM)
+          vmConsumedStorageMap[vmName] = (vmConsumedStorageMap[vmName] || 0) + consumedMiB;
+        }
+      });
+
       // vInfo normalization
       const rawVMData = XLSX.utils.sheet_to_json(vInfoSheet);
       const normalizedVMs = rawVMData.map(vm => {
-        const normalized = normalizeVMRow(vm, vmActiveMemoryMap);
+        const normalized = normalizeVMRow(vm, vmActiveMemoryMap, vmConsumedStorageMap);
         normalized.SourceFile = file.name;
         return normalized;
       });
@@ -268,7 +283,8 @@ console.log(`🔍 VM Count: ${normalizedVMs.length}`);
 console.log("🧠 Sample VM:", normalizedVMs[0]);
 console.log("📊 Total vCPU:", normalizedVMs.reduce((sum, vm) => sum + vm.NumCpu, 0));
 console.log("📊 Total Memory (GB):", normalizedVMs.reduce((sum, vm) => sum + vm.MemoryGB, 0).toFixed(1));
-console.log("📊 Total Disk (GB):", normalizedVMs.reduce((sum, vm) => sum + vm.UsedSpaceGB, 0).toFixed(1));
+console.log("📊 Total Disk - Provisioned (GB):", normalizedVMs.reduce((sum, vm) => sum + vm.ProvisionedSpaceGB, 0).toFixed(1));
+console.log("📊 Total Disk - Consumed (GB):", normalizedVMs.reduce((sum, vm) => sum + vm.ConsumedSpaceGB, 0).toFixed(1));
 console.groupEnd();
       currentVMData.push(...normalizedVMs);
 
@@ -392,14 +408,16 @@ function summarizeVMs(vmData) {
         vmCount: 0,
         totalCpu: 0,
         totalMemory: 0,
-        totalDisk: 0
+        totalProvisionedDisk: 0,
+        totalConsumedDisk: 0
       };
     }
 
     summary[key].vmCount += 1;
     summary[key].totalCpu += vm.NumCpu || 0;
     summary[key].totalMemory += vm.MemoryGB || 0;
-    summary[key].totalDisk += vm.UsedSpaceGB || 0;
+    summary[key].totalProvisionedDisk += vm.ProvisionedSpaceGB || 0;
+    summary[key].totalConsumedDisk += vm.ConsumedSpaceGB || 0;
   });
 
   return summary;}
@@ -461,7 +479,9 @@ function updatePreview() {
     const totalVMs = groupVMs.length;
     const totalCPU = groupVMs.reduce((sum, vm) => sum + vm.NumCpu, 0);
     const totalMemory = groupVMs.reduce((sum, vm) => sum + vm.MemoryGB, 0);
-    const totalDisk = groupVMs.reduce((sum, vm) => sum + vm.UsedSpaceGB, 0);
+    const totalProvisionedDisk = groupVMs.reduce((sum, vm) => sum + vm.ProvisionedSpaceGB, 0);
+    const totalConsumedDisk = groupVMs.reduce((sum, vm) => sum + vm.ConsumedSpaceGB, 0);
+    const totalDisk = totalProvisionedDisk; // Default to provisioned for preview
 
     const groupItem = document.createElement('li');
     groupItem.innerHTML = `
@@ -530,7 +550,7 @@ function renderPreview(vmData, fileName, fileIndex) {
     memCell.textContent = stats.totalMemory.toFixed(1);
 
     const diskCell = document.createElement('td');
-    diskCell.textContent = stats.totalDisk.toFixed(1);
+    diskCell.textContent = stats.totalProvisionedDisk.toFixed(1);
 
     row.appendChild(siteCell);
     row.appendChild(clusterCell);
@@ -608,7 +628,15 @@ function runSizing() {
       // Aggregate VM totals
       const totalVcpu = vms.reduce((sum, vm) => sum + vm.NumCpu, 0);
       const totalRAM = vms.reduce((sum, vm) => sum + vm.MemoryGB, 0);
-      const totalDisk = vms.reduce((sum, vm) => sum + vm.UsedSpaceGB, 0) / 1024; // TiB
+
+      // Get selected storage calculation method
+      const storageMethod = document.querySelector('input[name="storageMethod"]:checked')?.value || 'provisioned';
+      const provisionedDiskGB = vms.reduce((sum, vm) => sum + vm.ProvisionedSpaceGB, 0);
+      const consumedDiskGB = vms.reduce((sum, vm) => sum + vm.ConsumedSpaceGB, 0);
+      const selectedDiskGB = storageMethod === 'consumed' ? consumedDiskGB : provisionedDiskGB;
+      const totalDisk = selectedDiskGB / 1024; // TiB
+
+      console.log(`📊 Storage - Provisioned: ${provisionedDiskGB.toFixed(1)} GB, Consumed: ${consumedDiskGB.toFixed(1)} GB, Using: ${storageMethod} (${selectedDiskGB.toFixed(1)} GB)`);
 
       // Match hosts for this site + cluster(s)
       const matchingHosts = currentHostData.filter(host =>

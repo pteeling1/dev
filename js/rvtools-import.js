@@ -168,9 +168,8 @@ function normalizeVMRow(vm, memoryMap = {}, consumedStorageMap = {}) {
     Cluster: vm["Cluster"]?.trim() || 'Unknown',
     PowerState: vm["Powerstate"]?.trim().toLowerCase() || 'unknown',
     NumCpu: parseFloat(vm["CPUs"]) || 0,
-    MemoryGB: activeMB
-      ? activeMB / 1024
-      : parseFloat(vm["Memory"]) / 1024 || 0,
+    MemoryGB: parseFloat(vm["Memory"]) / 1024 || 0,  // Provisioned memory
+    ActiveMemoryGB: activeMB ? activeMB / 1024 : null,  // Active memory from vMemory (if available)
     ProvisionedSpaceGB: parseFloat(vm["In Use MiB"]) / 1024 || 0,  // Provisioned (In Use MiB from vInfo)
     ConsumedSpaceGB: consumedMiB ? consumedMiB / 1024 : 0,           // Guest OS consumed (ConsumedMiB from vPartition)
 
@@ -656,10 +655,20 @@ function runSizing() {
 
       // Aggregate VM totals
       const totalVcpu = vms.reduce((sum, vm) => sum + vm.NumCpu, 0);
-      const totalRAM = vms.reduce((sum, vm) => sum + vm.MemoryGB, 0);
-
-      // Get selected storage calculation method
+      
+      // Get selected calculation methods
+      const cpuMethod = document.querySelector('input[name="cpuMethod"]:checked')?.value || 'provisioned';
+      const memoryMethod = document.querySelector('input[name="memoryMethod"]:checked')?.value || 'provisioned';
       const storageMethod = document.querySelector('input[name="storageMethod"]:checked')?.value || 'provisioned';
+      
+      // Memory: Choose between provisioned or consumed (active)
+      const totalMemoryProvisioned = vms.reduce((sum, vm) => sum + vm.MemoryGB, 0);
+      const totalMemoryConsumed = vms.reduce((sum, vm) => sum + (vm.ActiveMemoryGB || vm.MemoryGB), 0);
+      const selectedMemory = memoryMethod === 'consumed' ? totalMemoryConsumed : totalMemoryProvisioned;
+      
+      console.log(`📊 Memory - Provisioned: ${totalMemoryProvisioned.toFixed(1)} GB, Consumed: ${totalMemoryConsumed.toFixed(1)} GB, Using: ${memoryMethod} (${selectedMemory.toFixed(1)} GB)`);
+
+      // Storage: Get provisioned vs consumed
       const provisionedDiskGB = vms.reduce((sum, vm) => sum + vm.ProvisionedSpaceGB, 0);
       const consumedDiskGB = vms.reduce((sum, vm) => sum + vm.ConsumedSpaceGB, 0);
       const selectedDiskGB = storageMethod === 'consumed' ? consumedDiskGB : provisionedDiskGB;
@@ -679,25 +688,37 @@ function runSizing() {
       const totalCores = matchingHosts.reduce((sum, host) => sum + host.totalCores, 0);
       const avgCpuUsage = totalCores > 0 ? totalUsageWeighted / totalCores : 0;
 
-
-
-      // CPU estimation based on observed vCPU/core and usage
+      // CPU estimation: Choose between provisioned or utilization-based
+      let finalCPU;
       const vcpuCoreRatio = totalPhysicalCores > 0 ? totalVcpu / totalPhysicalCores : 1;
-      const adjustedVcpuDemand = totalVcpu * (avgCpuUsage / 100);
-      const estimatedPhysicalCPU = Math.ceil((adjustedVcpuDemand / vcpuCoreRatio) * (1 + growthPct / 100));
-      const finalCPU = Math.max(estimatedPhysicalCPU, 1);
+      
+      if (cpuMethod === 'utilization') {
+        // Utilization-based: adjust by actual CPU usage
+        const adjustedVcpuDemand = totalVcpu * (avgCpuUsage / 100);
+        const estimatedPhysicalCPU = Math.ceil((adjustedVcpuDemand / vcpuCoreRatio) * (1 + growthPct / 100));
+        finalCPU = Math.max(estimatedPhysicalCPU, 1);
+        
+        console.log(`🧠 CPU Estimation (UTILIZATION): ${totalVcpu} vCPU × ${avgCpuUsage.toFixed(1)}% usage ÷ ${vcpuCoreRatio.toFixed(2)} ratio = ${finalCPU} cores`);
+      } else {
+        // Provisioned: use all vCPU count as-is
+        const estimatedPhysicalCPU = Math.ceil(totalVcpu * (1 + growthPct / 100));
+        finalCPU = Math.max(estimatedPhysicalCPU, 1);
+        
+        console.log(`🧠 CPU Estimation (PROVISIONED): ${totalVcpu} vCPU × (1 + ${growthPct}%) = ${finalCPU} cores`);
+      }
 
       console.group(`🧠 CPU Estimation Debug`);
+console.log("🔍 CPU Method:", cpuMethod);
 console.log("🔍 Total vCPU:", totalVcpu);
 console.log("🔍 Matching Hosts:", matchingHosts.length);
 console.log("🔍 Total Physical Cores:", totalPhysicalCores);
 console.log("🔍 Avg CPU Usage:", avgCpuUsage);
 console.log("🔍 vCPU/Core Ratio:", vcpuCoreRatio);
-console.log("🔍 Adjusted vCPU Demand:", adjustedVcpuDemand);
+console.log("🔍 Final CPU Cores:", finalCPU);
 console.groupEnd();
 
       // Calculate adjusted RAM and storage for payload
-      const adjustedTotalRAM = Math.ceil(totalRAM * (1 + growthPct / 100));
+      const adjustedTotalRAM = Math.ceil(selectedMemory * (1 + growthPct / 100));
       const adjustedTotalStorage = totalDisk * (1 + growthPct / 100);
 
       const forcedCpuModel = document.getElementById("cpuOverrideSelect")?.value;
@@ -771,13 +792,13 @@ console.groupEnd();
           <h5>📋 Requirements</h5>
           <ul>
             <li>VMs: ${vms.length}</li>
-            <li>Total vCPU: ${totalVcpu}</li>
-            <li>Total RAM: ${adjustedTotalRAM} GB</li>
-            <li>Total Disk: ${adjustedTotalStorage.toFixed(1)} TiB</li>
+            <li>Total vCPU (provisioned): ${totalVcpu}</li>
+            <li>Total RAM: ${adjustedTotalRAM.toFixed(1)} GB (${memoryMethod} method)</li>
+            <li>Total Disk: ${adjustedTotalStorage.toFixed(1)} TiB (${storageMethod} method)</li>
             <li>Hosts: ${hostCount}</li>
             <li>Avg CPU Usage: ${avgCpuUsage.toFixed(1)}%</li>
             <li>vCPU/Core Ratio: ${vcpuCoreRatio.toFixed(2)}</li>
-            <li>Estimated Physical CPU: ${finalCPU}</li>
+            <li>Estimated Physical CPU: ${finalCPU} cores (${cpuMethod} method)</li>
           </ul>
 
           <h5>⚙️ Recommended Configuration</h5>

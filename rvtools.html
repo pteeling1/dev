@@ -170,6 +170,42 @@
         </div>
       </div>
     </div>
+
+    <div class="row g-3 mt-2">
+      <div class="col-md-12">
+        <label class="form-label">CPU Calculation Method</label>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="cpuMethod" id="cpuProvisioned" value="provisioned" checked>
+          <label class="form-check-label" for="cpuProvisioned">
+            Size for provisioned vCPU (use all provisioned vCPU count)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="cpuMethod" id="cpuUtilization" value="utilization">
+          <label class="form-check-label" for="cpuUtilization">
+            Size for actual CPU demand (adjust by host CPU utilization %)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+      <div class="col-md-12">
+        <label class="form-label">Memory Calculation Method</label>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="memoryMethod" id="memoryProvisioned" value="provisioned" checked>
+          <label class="form-check-label" for="memoryProvisioned">
+            Size for provisioned memory (use all provisioned memory)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="memoryMethod" id="memoryConsumed" value="consumed">
+          <label class="form-check-label" for="memoryConsumed">
+            Size for active memory (use actual consumed/active memory from vMemory)
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 
  <!-- Preview + Sizing Results side by side -->

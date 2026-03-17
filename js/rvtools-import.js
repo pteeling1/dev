@@ -1,6 +1,7 @@
 import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs';
 import { sizeCluster } from './sizingEngine.js';
-import { cpuList } from './cpuData.js';
+import { cpuList as cpuData16G } from './cpuData.js';
+import { cpuList as cpuData17G } from './17GcpuData.js';
 
 const uploadInput = document.getElementById('rvtoolsUpload');
 const previewTable = document.getElementById('preview-table');
@@ -21,6 +22,12 @@ let currentFileIndex = 0;
 let groupCounter = 1;
 let savedClusterGroups = [];
 let sizingResults = [];
+let currentCpuGeneration = '16g';  // Track which CPU generation is active
+
+// Get active CPU list based on selected generation
+function getActiveCpuList() {
+  return currentCpuGeneration === '17g' ? cpuData17G : cpuData16G;
+}
 
 uploadInput.addEventListener('change', handleFileUpload);
 excludePoweredOffCheckbox.addEventListener('change', updatePreview);
@@ -29,19 +36,55 @@ addGroupBtn.addEventListener('click', addClusterGroup);
 document.getElementById('exportSummaryBtn').addEventListener('click', () => {
   exportSizingSummaryToExcel(sizingResults);
 });
+
+// CPU Generation toggle
+document.querySelectorAll('input[name="cpuGeneration"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    currentCpuGeneration = e.target.value;
+    console.log(`🔄 Switched to CPU generation: ${currentCpuGeneration.toUpperCase()}`);
+    populateCpuOverrideDropdown();
+  });
+});
 function populateCpuOverrideDropdown() {
   const select = document.getElementById("cpuOverrideSelect");
+  const exclusionContainer = document.getElementById("cpuExclusionCheckboxes");
+  const cpuList = getActiveCpuList();
+  
   if (!select || !Array.isArray(cpuList)) return;
 
   const models = [...new Set(cpuList.map(cpu => cpu.model))].sort();
 
- cpuList.forEach(cpu => {
-  const option = document.createElement("option");
-  option.value = cpu.model;
-  option.textContent = `${cpu.model} (${cpu.cores} cores)`;
-  select.appendChild(option);
-});
+  // Clear existing options and checkboxes
+  select.innerHTML = '<option value="">(No override)</option>';
+  exclusionContainer.innerHTML = '';
+
+  cpuList.forEach(cpu => {
+    const option = document.createElement("option");
+    option.value = cpu.model;
+    option.textContent = `${cpu.model} (${cpu.cores} cores)`;
+    select.appendChild(option);
+  });
+  
+  // Populate CPU exclusion checkboxes
+  models.forEach(model => {
+    const id = `cpu-exclude-${model.replace(/[^a-z0-9]/gi, '_')}`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'form-check';
+    wrapper.innerHTML = `
+      <input class="form-check-input cpu-exclude" type="checkbox" value="${model}" id="${id}" data-cpu-model="${model}">
+      <label class="form-check-label" for="${id}">${model}</label>
+    `;
+    exclusionContainer.appendChild(wrapper);
+  });
+  
+  console.log(`📊 CPU Generation: ${currentCpuGeneration.toUpperCase()} - ${models.length} models available`);
 }
+
+function getExcludedCpus() {
+  const excludedCheckboxes = document.querySelectorAll('.cpu-exclude:checked');
+  return Array.from(excludedCheckboxes).map(cb => cb.value);
+}
+
 document.addEventListener("DOMContentLoaded", populateCpuOverrideDropdown);
 
 function addClusterGroup() {
@@ -74,24 +117,57 @@ function addClusterGroup() {
       ...uniqueClusters
     ]));
   } else {
-    savedClusterGroups.push({ name: groupName.trim(), clusters: uniqueClusters });
+    savedClusterGroups.push({ name: groupName.trim(), clusters: uniqueClusters, haLevel: null });
   }
 
   // Clear selection checkboxes after grouping
   clusterContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
 
-  // Re-render the group definitions list cleanly
+  // Re-render the group definitions list with resiliency controls
   groupInputsDiv.innerHTML = '';
 
   const definitionHeader = document.createElement('div');
-  definitionHeader.style.marginBottom = '6px';
-  definitionHeader.textContent = `${savedClusterGroups.length} manually defined group${savedClusterGroups.length > 1 ? 's' : ''}`;
+  definitionHeader.style.marginBottom = '12px';
+  definitionHeader.innerHTML = `<strong>${savedClusterGroups.length} group${savedClusterGroups.length > 1 ? 's' : ''}</strong>`;
   groupInputsDiv.appendChild(definitionHeader);
 
-  savedClusterGroups.forEach(group => {
-    const line = document.createElement('div');
-    line.textContent = `${group.name} – ${group.clusters.join(', ')}`;
-    groupInputsDiv.appendChild(line);
+  savedClusterGroups.forEach((group, idx) => {
+    const groupContainer = document.createElement('div');
+    groupContainer.style.marginBottom = '12px';
+    groupContainer.style.padding = '10px';
+    groupContainer.style.border = '1px solid #dee2e6';
+    groupContainer.style.borderRadius = '4px';
+    groupContainer.style.backgroundColor = '#f8f9fa';
+    
+    const groupNameLine = document.createElement('div');
+    groupNameLine.innerHTML = `<strong>${group.name}</strong> – ${group.clusters.join(', ')}`;
+    groupNameLine.style.marginBottom = '8px';
+    groupContainer.appendChild(groupNameLine);
+    
+    // Resiliency dropdown for this group
+    const resiliencyLabel = document.createElement('label');
+    resiliencyLabel.style.display = 'block';
+    resiliencyLabel.style.marginBottom = '8px';
+    resiliencyLabel.textContent = 'Override Resiliency:';
+    groupContainer.appendChild(resiliencyLabel);
+    
+    const resiliencySelect = document.createElement('select');
+    resiliencySelect.className = 'form-select';
+    resiliencySelect.style.width = '100%';
+    resiliencySelect.innerHTML = `
+      <option value="">(Use global setting)</option>
+      <option value="n">N</option>
+      <option value="n+1">N+1</option>
+      <option value="n+2">N+2</option>
+    `;
+    resiliencySelect.value = group.haLevel || '';
+    resiliencySelect.addEventListener('change', (e) => {
+      group.haLevel = e.target.value || null;
+      console.log(`📋 Group "${group.name}" resiliency set to: ${group.haLevel || 'global'}`);
+    });
+    groupContainer.appendChild(resiliencySelect);
+    
+    groupInputsDiv.appendChild(groupContainer);
   });
 
   // Create a single Clear Groups button (avoid duplicates)
@@ -668,13 +744,24 @@ function runSizing() {
       
       console.log(`📊 Memory - Provisioned: ${totalMemoryProvisioned.toFixed(1)} GB, Consumed: ${totalMemoryConsumed.toFixed(1)} GB, Using: ${memoryMethod} (${selectedMemory.toFixed(1)} GB)`);
 
-      // Storage: Get provisioned vs consumed
+      // Storage: Get provisioned vs consumed, or use external storage only
       const provisionedDiskGB = vms.reduce((sum, vm) => sum + vm.ProvisionedSpaceGB, 0);
       const consumedDiskGB = vms.reduce((sum, vm) => sum + vm.ConsumedSpaceGB, 0);
-      const selectedDiskGB = storageMethod === 'consumed' ? consumedDiskGB : provisionedDiskGB;
-      const totalDisk = selectedDiskGB / 1024; // TiB
-
-      console.log(`📊 Storage - Provisioned: ${provisionedDiskGB.toFixed(1)} GB, Consumed: ${consumedDiskGB.toFixed(1)} GB, Using: ${storageMethod} (${selectedDiskGB.toFixed(1)} GB)`);
+      
+      let selectedDiskGB;
+      let totalDisk;
+      
+      if (storageMethod === 'external') {
+        // External storage: 2 × 960 GB NVMe
+        selectedDiskGB = 2 * 960; // 1920 GB
+        totalDisk = selectedDiskGB / 1024; // Convert to TiB (~1.88 TiB)
+        console.log(`📊 Storage - External storage mode: 2 × 960 GB NVMe (${totalDisk.toFixed(2)} TiB, no VM sizing)`);
+      } else {
+        // Provisioned or consumed from VMs
+        selectedDiskGB = storageMethod === 'consumed' ? consumedDiskGB : provisionedDiskGB;
+        totalDisk = selectedDiskGB / 1024; // TiB
+        console.log(`📊 Storage - Provisioned: ${provisionedDiskGB.toFixed(1)} GB, Consumed: ${consumedDiskGB.toFixed(1)} GB, Using: ${storageMethod} (${selectedDiskGB.toFixed(1)} GB)`);
+      }
 
       // Match hosts for this site + cluster(s)
       const matchingHosts = currentHostData.filter(host =>
@@ -722,10 +809,30 @@ console.groupEnd();
       const adjustedTotalStorage = totalDisk * (1 + growthPct / 100);
 
       const forcedCpuModel = document.getElementById("cpuOverrideSelect")?.value;
+      const excludedCpus = getExcludedCpus();
+      
+      if (excludedCpus.length > 0) {
+        console.log(`🚫 Excluded CPU models: ${excludedCpus.join(', ')}`);
+      }
+
+      // Determine resiliency level: use group override if set, otherwise use global
+      const effectiveHaLevel = group.haLevel || haLevel;
+      if (group.haLevel) {
+        console.log(`📋 Group "${group.name}" using resiliency override: ${group.haLevel}`);
+      }
 
       // Try multiple chassis and pick the one with minimum nodes (batch sizing preference)
-      // Always try all chassis: let sizing engine decide what's viable
-      const chassisModelsToTry = ['AX-4510c', 'AX 760', 'AX 770'];
+      // Select chassis models based on CPU generation
+      let chassisModelsToTry;
+      if (currentCpuGeneration === '17g') {
+        // 17G: AX 670 and AX 770
+        chassisModelsToTry = ['AX 670', 'AX 770'];
+        console.log(`🔧 CPU Generation 17G: Trying chassis: ${chassisModelsToTry.join(', ')}`);
+      } else {
+        // 16G: AX-4510c, AX 660, AX 760
+        chassisModelsToTry = ['AX-4510c', 'AX 660', 'AX 760'];
+        console.log(`🔧 CPU Generation 16G: Trying chassis: ${chassisModelsToTry.join(', ')}`);
+      }
 
       let result = null;
       let sizingAttempts = [];
@@ -736,10 +843,12 @@ console.groupEnd();
             totalCPU: finalCPU,
             totalRAM: adjustedTotalRAM,
             totalStorage: adjustedTotalStorage,
-            haLevel,
+            haLevel: effectiveHaLevel,
             growthPct: growthPct / 100,
             chassisModel: chassis,
-            disableSweetSpot: true  // Batch sizing: minimize node count
+            disableSweetSpot: true,  // Batch sizing: minimize node count
+            excludedCpus: excludedCpus,  // Pass excluded CPUs to sizing engine
+            cpuGeneration: currentCpuGeneration  // Pass CPU generation to sizing engine
           };
 
           if (forcedCpuModel) {
@@ -804,6 +913,7 @@ console.groupEnd();
           <h5>⚙️ Recommended Configuration</h5>
           <ul>
             <li>Required Nodes: ${result.nodeCount}</li>
+            <li>CPU Generation: ${currentCpuGeneration.toUpperCase()}</li>
             <li>CPU Model – ${result.cpuModel} – ${result.cpuCoresPerSocket} core, ${result.cpuClockGHz} GHz</li>
             <li>Total Cores (all nodes): ${result.totalCores}</li>
             <li>Memory Config: ${result.memoryConfig}</li>

@@ -1,5 +1,5 @@
 import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs';
-import { sizeCluster } from './sizingEngine.js';
+import { sizeCluster, splitClusters } from './sizingEngine.js';
 import { cpuList as cpuData16G } from './cpuData.js';
 import { cpuList as cpuData17G } from './17GcpuData.js';
 
@@ -877,7 +877,19 @@ console.groupEnd();
       });
 
       result = sizingAttempts[0];
-      console.log(`   ✅ Selected: ${result.chassisModel} with ${result.nodeCount} nodes (batch preference)`);
+      
+      // Apply cluster splitting logic for best practices
+      const clusterSizes = splitClusters(result.nodeCount);
+      const clusterCount = clusterSizes.length;
+      const nodesPerCluster = clusterSizes[0]; // First cluster size (may vary slightly)
+      
+      console.log(`   ✅ Selected: ${result.chassisModel} with ${result.nodeCount} total nodes`);
+      console.log(`   📊 Cluster split (best practice): ${clusterCount} cluster${clusterCount > 1 ? 's' : ''} - ${clusterSizes.join(', ')} nodes`);
+
+      // Store both total nodes and cluster breakdown
+      result.totalNodes = result.nodeCount;
+      result.clusterSizes = clusterSizes;
+      result.clusterCount = clusterCount;
 
 
       sizingResults.push({
@@ -912,14 +924,16 @@ console.groupEnd();
 
           <h5>⚙️ Recommended Configuration</h5>
           <ul>
-            <li>Required Nodes: ${result.nodeCount}</li>
+            <li>Total Nodes Required: ${result.totalNodes}</li>
+            <li>Cluster Breakdown: ${result.clusterCount} cluster${result.clusterCount > 1 ? 's' : ''} (${result.clusterSizes.join(' + ')} nodes, max 6 per cluster)</li>
             <li>CPU Generation: ${currentCpuGeneration.toUpperCase()}</li>
             <li>CPU Model – ${result.cpuModel} – ${result.cpuCoresPerSocket} core, ${result.cpuClockGHz} GHz</li>
+            <li>Total Cores (per node): ${(result.totalCores / result.totalNodes).toFixed(0)} cores</li>
             <li>Total Cores (all nodes): ${result.totalCores}</li>
             <li>Memory Config: ${result.memoryConfig}</li>
-            <li>Disk Config: ${result.disksPerNode} × ${result.diskSizeTB} TB</li>
+            <li>Disk Config: ${result.disksPerNode} × ${result.diskSizeTB} TB per node</li>
             <li>Resiliency: ${result.resiliency}</li>
-            <li>Usable Storage (TiB): ${result.usableTiB}</li>
+            <li>Usable Storage (per cluster): ${(result.usableTiB / result.clusterCount).toFixed(1)} TiB</li>
             <li>CPU Utilization: ${result.efficiency?.cpuUtilization}</li>
             <li>Memory Utilization: ${result.efficiency?.memoryUtilization}</li>
             <li>Post-Failure Cores: ${result.totalClusterResources?.postFailure?.usableCores}</li>

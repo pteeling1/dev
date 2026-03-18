@@ -1300,5 +1300,232 @@ if (themeSelector) {
   });
 }
 
+// ✅ Save Configuration Handler
+const saveConfigBtnConfirm = document.getElementById("saveConfigBtnConfirm");
+if (saveConfigBtnConfirm) {
+  saveConfigBtnConfirm.addEventListener("click", async () => {
+    const configName = document.getElementById("configName").value;
+    const configDescription = document.getElementById("configDescription").value;
+    const saveStatus = document.getElementById("saveStatus");
+
+    if (!configName.trim()) {
+      saveStatus.classList.remove("d-none");
+      saveStatus.className = "alert alert-warning d-none";
+      saveStatus.innerHTML = "⚠️ Please enter a configuration name";
+      saveStatus.classList.remove("d-none");
+      return;
+    }
+
+    try {
+      // Get current UI state
+      const payload = getSizingPayloadFromHTML();
+      
+      // Build configuration object
+      const config = {
+        metadata: {
+          name: configName,
+          description: configDescription,
+          savedDate: new Date().toISOString()
+        },
+        uiState: {
+          nodeCount: document.getElementById("nodeSlider").value,
+          nodeType: document.querySelector('input[name="nodeType"]:checked').value,
+          cpuChoice: document.getElementById("cpuChoice").value,
+          memorySize: document.getElementById("memorySize").value,
+          diskCount: document.getElementById("disks").value,
+          diskSize: document.getElementById("diskSize").value,
+          resiliency: document.getElementById("resiliency").value
+        },
+        calculation: window.lastSizingResult || null,
+        payload: payload
+      };
+
+      // Get auth token from Auth0 (would need Auth0 SDK integration)
+      // For now, show status
+      saveStatus.classList.remove("d-none");
+      saveStatus.className = "alert alert-info";
+      saveStatus.innerHTML = `📤 Saving "${configName}"...`;
+
+      // Call API
+      const response = await fetch("https://ax-calculator-api.azurewebsites.net/api/configs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("auth0_token") || ""}`
+        },
+        body: JSON.stringify(config)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        saveStatus.className = "alert alert-success";
+        saveStatus.innerHTML = `✅ Configuration "${configName}" saved successfully!`;
+        
+        // Clear form
+        document.getElementById("configName").value = "";
+        document.getElementById("configDescription").value = "";
+        
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          bootstrap.Modal.getInstance(document.getElementById("saveConfigModal")).hide();
+        }, 2000);
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      saveStatus.classList.remove("d-none");
+      saveStatus.className = "alert alert-danger";
+      saveStatus.innerHTML = `❌ Error saving configuration: ${error.message}`;
+    }
+  });
+}
+
+// ✅ Load Configuration Handler
+const loadConfigModal = document.getElementById("loadConfigModal");
+if (loadConfigModal) {
+  loadConfigModal.addEventListener("show.bs.modal", async () => {
+    const configList = document.getElementById("configList");
+    const loadStatus = document.getElementById("loadStatus");
+
+    try {
+      loadStatus.innerHTML = "Loading saved configurations...";
+      
+      // Call API to list configs
+      const response = await fetch("https://ax-calculator-api.azurewebsites.net/api/configs", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("auth0_token") || ""}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const configs = data.configs || [];
+
+        if (configs.length === 0) {
+          loadStatus.innerHTML = "ℹ️ No saved configurations yet";
+          configList.innerHTML = "";
+        } else {
+          loadStatus.className = "alert alert-success d-none";
+          configList.innerHTML = configs.map(config => `
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h6 class="mb-1">${config.metadata?.name || "Unnamed"}</h6>
+                  <small class="text-muted">${config.metadata?.description || "No description"}</small>
+                  <br>
+                  <small class="text-secondary">${new Date(config.metadata?.savedDate).toLocaleDateString()}</small>
+                </div>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button type="button" class="btn btn-outline-primary load-btn" data-config-id="${config.id}">
+                    <i class="bi bi-download"></i> Load
+                  </button>
+                  <button type="button" class="btn btn-outline-danger delete-btn" data-config-id="${config.id}">
+                    <i class="bi bi-trash"></i> Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join("");
+
+          // Add event listeners to load/delete buttons
+          document.querySelectorAll(".load-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => loadConfiguration(e.target.closest("button").dataset.configId));
+          });
+
+          document.querySelectorAll(".delete-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => deleteConfiguration(e.target.closest("button").dataset.configId));
+          });
+        }
+      } else {
+        loadStatus.innerHTML = `❌ Error loading configurations: HTTP ${response.status}`;
+      }
+    } catch (error) {
+      loadStatus.innerHTML = `❌ Error: ${error.message}`;
+    }
+  });
+}
+
+// ✅ Helper function to load a configuration
+async function loadConfiguration(configId) {
+  try {
+    const response = await fetch(`https://ax-calculator-api.azurewebsites.net/api/configs/${configId}`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${localStorage.getItem("auth0_token") || ""}`
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const config = data.config;
+
+      // Restore UI state
+      if (config.uiState) {
+        document.getElementById("nodeSlider").value = config.uiState.nodeCount;
+        document.getElementById("nodeValue").textContent = config.uiState.nodeCount;
+        
+        document.querySelector(`input[name="nodeType"][value="${config.uiState.nodeType}"]`).checked = true;
+        document.getElementById("cpuChoice").value = config.uiState.cpuChoice;
+        document.getElementById("memorySize").value = config.uiState.memorySize;
+        document.getElementById("disks").value = config.uiState.diskCount;
+        document.getElementById("diskSize").value = config.uiState.diskSize;
+        document.getElementById("resiliency").value = config.uiState.resiliency;
+
+        // Trigger calculations
+        calculateTotals();
+        refreshAllVisuals();
+
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById("loadConfigModal")).hide();
+
+        // Show success message
+        const alertDiv = document.createElement("div");
+        alertDiv.className = "alert alert-success alert-dismissible fade show";
+        alertDiv.innerHTML = `✅ Configuration "${config.metadata?.name}" loaded! <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+        document.body.insertAdjacentElement("afterbegin", alertDiv);
+      }
+    } else {
+      alert(`Error loading configuration: HTTP ${response.status}`);
+    }
+  } catch (error) {
+    alert(`Error loading configuration: ${error.message}`);
+  }
+}
+
+// ✅ Helper function to delete a configuration
+async function deleteConfiguration(configId) {
+  if (!confirm("Are you sure you want to delete this configuration?")) return;
+
+  try {
+    const response = await fetch(`https://ax-calculator-api.azurewebsites.net/api/configs/${configId}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${localStorage.getItem("auth0_token") || ""}`
+      }
+    });
+
+    if (response.ok) {
+      // Reload the modal content
+      const modal = bootstrap.Modal.getInstance(document.getElementById("loadConfigModal"));
+      modal.hide();
+      
+      // Re-open to refresh list
+      setTimeout(() => {
+        const newModal = new bootstrap.Modal(document.getElementById("loadConfigModal"));
+        newModal.show();
+      }, 500);
+    } else {
+      alert(`Error deleting configuration: HTTP ${response.status}`);
+    }
+  } catch (error) {
+    alert(`Error deleting configuration: ${error.message}`);
+  }
+}
+
+// ✅ Expose helper functions globally
+window.loadConfiguration = loadConfiguration;
+window.deleteConfiguration = deleteConfiguration;
+
 });
 

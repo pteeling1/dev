@@ -1,22 +1,27 @@
 /**
- * Backend API Server
- * Runs on Azure Functions or Azure App Service
+ * Backend API Server for AX Calculator Save/Load
+ * Express-based server for Azure App Service
  * 
- * Usage (local dev):
- *   npm install
- *   npm run dev
- * 
- * Production: Deploy to Azure Functions or App Service
+ * Endpoints:
+ *   GET    /api/health           - health check
+ *   GET    /api/user             - get current user info
+ *   POST   /api/configs          - save new config
+ *   GET    /api/configs          - list all configs for user
+ *   GET    /api/configs/:id      - get specific config
+ *   PUT    /api/configs/:id      - update config
+ *   DELETE /api/configs/:id      - delete config
  */
 
-import express from 'express';
-import cors from 'cors';
-import * as dotenv from 'dotenv';
-import { CosmosClient } from '@azure/cosmos';
-import jwt from 'express-jwt';
-import jwksRsa from 'jwks-rsa';
+require('dotenv').config();
 
-dotenv.config();
+const express = require('express');
+const cors = require('cors');
+const { CosmosClient } = require('@azure/cosmos');
+const jwt = require('jsonwebtoken');
+const jwksRsa = require('jwks-rsa');
+
+const cosmosHelper = require('./shared/cosmosHelper');
+const authHelper = require('./shared/authHelper');
 
 const app = express();
 
@@ -26,7 +31,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3001;
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
-const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || 'https://sizer.teeling.ai';
+const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || 'teeling sizer API dev';
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT;
 const COSMOS_KEY = process.env.COSMOS_KEY;
 const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'ax-calculator';
